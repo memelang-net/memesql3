@@ -116,7 +116,7 @@ def nameput (names: list, table: str = None):
 		bid=int(name[2])
 
 		if rid!=NAM: continue
-		if not aid and name[4]!=A2K[0]: raise ValueError(f"Empty aid")
+		if not aid and name[4]!=K[0]: raise ValueError(f"Empty aid")
 		if not bid: raise ValueError(f"Empty bid")
 
 		sql_inserts.append(f"(%s, %s, %s)")

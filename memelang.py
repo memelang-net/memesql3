@@ -3,138 +3,20 @@ import html
 import db
 from conf import *
 
-INVERSE = '-1'
-NOTFALSE = '!=0'
-
-OPR = {
-	None: {
-		'long': None,
-		'shrt': None,
-		'grp': None,
-	},
-	K2A['@']: {
-		'long' : '',
-		'shrt' : '',
-		'grp' : K2A['@'],
-		'frm' : 'aid',
-	},
-	K2A["'"]: {
-		'long' : '\'',
-		'shrt' : '\'',
-		'grp' : K2A['.'],
-		'frm' : 'aid',
-	},
-	K2A['.']: {
-		'long' : '.',
-		'shrt' : '.',
-		'grp' : K2A['.'],
-		'frm' : 'aid',
-	},
-	K2A['[ba]'] : {
-		'long' : '[ba]',
-		'shrt' : '.',
-		'grp' : K2A['[ba]'],
-		'frm' : 'aid',
-	},
-	K2A['[bb]'] : {
-		'long' : '[bb]',
-		'shrt' : "'",
-		'grp' : K2A['[ba]'],
-		'frm' : 'aid',
-	},
-	K2A[':']: {
-		'long' : ':',
-		'shrt' : ':',
-		'grp' : K2A[':'],
-		'frm' : 'aid',
-	},
-	K2A['=']: {
-		'long' : '=',
-		'shrt' : '=',
-		'grp' : K2A['='],
-		'frm' : 'non',
-	},
-	K2A['!='] : {
-		'long' : '!=',
-		'shrt' : '!=',
-		'grp' : K2A['='],
-		'frm' : 'non',
-	},
-	K2A['>'] : {
-		'long' : '>',
-		'shrt' : '>',
-		'grp' : K2A['='],
-		'frm' : 'non',
-	},
-	K2A['>='] : {
-		'long' : '>=',
-		'shrt' : '>=',
-		'grp' : K2A['='],
-		'frm' : 'non',
-	},
-	K2A['<'] : {
-		'long' : '<',
-		'shrt' : '<',
-		'grp' : K2A['='],
-		'frm' : 'non',
-	},
-	K2A['<='] : {
-		'long' : '<=',
-		'shrt' : '<=',
-		'grp' : K2A['='],
-		'frm' : 'non',
-	},
-	K2A[' '] : {
-		'long' : ' ',
-		'shrt' : ' ',
-		'grp' : K2A[' '],
-		'frm' : 'end',
-	},
-	K2A[';'] : {
-		'long' : ';',
-		'shrt' : ';',
-		'grp' : K2A[';'],
-		'frm' : 'end',
-	},
-	K2A['#']: {
-		'long' : '',
-		'shrt' : '',
-		'grp' : K2A['#'],
-		'frm' : 'dec',
-	},
-	K2A['$']: {
-		'long' : '',
-		'shrt' : '',
-		'grp' : K2A['$'],
-		'frm' : 'str',
-	},
-}
-
-OPR_CHR = {
-	".": 1,
-	":": 1,
-	"'": 1,
-	"?": 1,
-	"=": 2,
-	"!": 2,
-	"#": 2,
-	">": 2,
-	"<": 2,
-	"[": 2,
-}
-
-
 # Conbine SQL and parameters into a string
 def morfigy(sql, params):
 	new_query = sql
 	for param in params:
-		param = str(param).replace("'", "''")
-		new_query = new_query.replace("%s", f"'{param}'", 1)
+
+		if isinstance(param, str): param = "'"+str(param).replace("'", "''")+"'"
+		else: param = str(param)
+
+		new_query = new_query.replace("%s", param, 1)
 	return new_query
 
 
-# Input string "John Adams"
-# Output lowercase underscored string "john_adams"
+# Input: string "John Adams"
+# Output: lowercase underscored string "john_adams"
 def lowify(quo):
 	return re.sub(r'__+', '_', re.sub(r'[^a-z0-9]', '_', quo.lower())).strip('_')
 
@@ -166,7 +48,7 @@ def delace(mqry):
 	operands = [MIX]
 	operation = 0
 
-	group_cnt = {K2A[':']: 0, K2A['.']: 0, K2A['=']: 0, K2A['[ba]']: 0}
+	group_cnt = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0}
 	operator = None
 	group = None
 	opstr = ''
@@ -179,12 +61,19 @@ def delace(mqry):
 		# Semicolon separates commands, space separates statements
 		if c == ';' or c.isspace():
 
+			# Assume is true
+			if group_cnt[I['=']]==0:
+				operation+=1
+				operators.append(I['t'])
+				operands.append(None)
+
 			operation+=1
-			operators.append(K2A[c])
+			operators.append(I[c])
 			operands.append(None)
+
 			operator = None
 			group = None
-			group_cnt = {K2A[':']: 0, K2A['.']: 0, K2A['=']: 0, K2A['[ba]']: 0}
+			group_cnt = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0}
 
 			i += 1
 			continue
@@ -194,7 +83,6 @@ def delace(mqry):
 			while i < mqry_cnt and mqry_chars[i] != '\n': i += 1
 			i += 1
 			continue
-
 
 		# Operators
 		elif c in OPR_CHR:
@@ -209,19 +97,20 @@ def delace(mqry):
 				j = 0
 				while j < 3 and (i+j) < mqry_cnt:
 					cc = mqry_chars[i+j]
-					if cc in K2A and (j == 0 or OPR_CHR.get(cc) == 2):
+					if cc in I and (j == 0 or OPR_CHR.get(cc) == 2):
 						opstr += cc
 						j += 1
 					else: break
 
-			operator = K2A[opstr]
+			operator = I[opstr]
 
 			if operator not in OPR:
 				raise Exception(f"Memelang parse error: Operator {opstr} not recognized at char {i} in {mqry}")
 
-			if group_cnt[K2A['.']] > 0:
-				if operator == K2A['.']: operator=K2A['[ba]']   # .R.R
-				elif operator == K2A["'"]: operator=K2A['[bb]'] # 'R'R
+			# Short -> long
+			if group_cnt[I['.']] > 0:
+				if operator == I['.']: operator=I['[ba]']   # .R.R
+				elif operator == I["'"]: operator=I['[bb]'] # 'R'R
 
 			operation+=1
 			operators.append(operator)
@@ -230,10 +119,10 @@ def delace(mqry):
 			group_cnt[group] += 1
 
 			# error checks
-			if group == K2A['.'] and group_cnt[K2A[':']] > 0:
+			if group == I['.'] and group_cnt[I[':']] > 0:
 				raise Exception(f"Memelang parse error: Errant R after B at char {i} in {mqry}")
 
-			if group == K2A['='] and group_cnt[K2A['=']] > 1:
+			if group == I['='] and group_cnt[I['=']] > 1:
 				raise Exception(f"Memelang parse error: Extraneous equality operator at char {i} in {mqry}")
 
 			i += j
@@ -241,7 +130,7 @@ def delace(mqry):
 
 		# Double-quote string ="George Washtingon's Horse \"Blueskin\""
 		elif c == '"':
-			if operator != K2A['=']:
+			if operator != I['=']:
 				raise Exception(f"Errant quote at char {i} in {mqry}")
 
 			while i < mqry_cnt-1:
@@ -257,64 +146,44 @@ def delace(mqry):
 					operand += ch
 
 			operation+=1
-			operators.append(K2A['$'])
+			operators.append(I['$'])
 			operands.append(operand)
 			operator = None
 			group = None
 			continue
 
 		# String/number following equal sign
-		elif operator == K2A['=']:
+		elif group == I['=']:
 
 			while i < mqry_cnt and re.match(r'[a-z0-9_\.\-]', mqry_chars[i]):
 				operand += mqry_chars[i]
 				i += 1
 
 			if operand in ('t','f','g'):
-				operation+=1
-				operators.append(K2A[operand])
-				operands.append(None)
+				if operator != I['=']: raise Exception(f"Memelang parse error: {operand} not after =")
+
+				operators[operation]=I[operand]
 		
 			# =tn for or-group
 			elif operand.startswith('t'):
+				if operator != I['=']: raise Exception(f"Memelang parse error: {operand} not after =")
+
 				tm = re.match(r't(\d+)$', operand)
 				if tm:
+					operators[operation]=I['t']
 					operation+=1
-					operators.append(K2A['t'])
-					operands.append(None)
-					operation+=1
-					operators.append(K2A['or'])
+					operators.append(I['or'])
 					operands.append(int(tm.group(1)))
-				else:
-					raise Exception(f"Memelang parse error: Unrecognized =Q at char {i} in {mqry}")
+				else: raise Exception(f"Memelang parse error: Unrecognized =Q at char {i} in {mqry}")
 
-			#number
+			# floating point number
 			else:
-				# Validate number
 				try:
 					operation+=1
-					operators.append(K2A['#'])
+					operators.append(I['#'])
 					operands.append(float(operand))
 				except ValueError:
 					raise Exception(f"Memelang parse error: Malformed number {operand} at char {i} in {mqry}")
-
-			operator = None
-			group = None
-			continue
-
-		# Number following inequal sign
-		elif group == K2A['=']:
-			while i < mqry_cnt and re.match(r'[0-9.\-]', mqry_chars[i]):
-				operand += mqry_chars[i]
-				i += 1
-
-			# Validate number
-			try:
-				operation+=1
-				operators.append(K2A['#'])
-				operands.append(float(operand))
-			except ValueError:
-				raise Exception(f"Memelang parse error: Malformed number {operand} at char {i} in {mqry}")
 
 			operator = None
 			group = None
@@ -328,12 +197,18 @@ def delace(mqry):
 			# A string
 			if group is None:
 				operation+=1
-				operators.append(K2A['@'])
+				operators.append(I['@'])
 				operands.append(operand)
 
-			# String following A, R, B, or [xx]
-			elif group in (K2A['.'], K2A[':'], K2A['[ba]']):
+			# String following R or B
+			elif group in (I['.'], I[':']):
 				operands[operation]=operand
+
+			# String following [xx] is .R
+			elif group == I['[ba]']:
+				operation+=1
+				operators.append(I['.'])
+				operands.append(operand)
 
 			else:
 				raise Exception(f"Memelang parse error: Unexpected character '{mqry_chars[i]}' at char {i} in {mqry}")
@@ -359,15 +234,12 @@ def interlace(operators, operands, interlace_set={}):
 		operand = operands[i]
 
 		# Special cases
-		if operator == K2A['#']:
+		if operator == I['#']:
 			if '.' not in str(operand):
 				operand = str(operand) + '.0'
 
-		elif operator == K2A[';'] and interlace_set.get('newline'):
+		elif operator == I[';'] and interlace_set.get('newline'):
 			opstr+="\n"
-
-		elif operator in (K2A['t'], K2A['f'], K2A['g']):
-			operand = A2K[operator]
 
 		# Append the interlaced expression
 		if interlace_set.get('html'):
@@ -388,8 +260,8 @@ def interlace(operators, operands, interlace_set={}):
 # Output [[[operator, operator], [operand, operand]]]
 def cmdify(operators: list, operands: list, cmdify_set={}, table=DB_TABLE_MEME):
 
-	if operators[-1]!=K2A[';']:
-		operators.append(K2A[';'])
+	if operators[-1]!=I[';']:
+		operators.append(I[';'])
 		operands.append(None)
 
 	cmds = []
@@ -398,18 +270,18 @@ def cmdify(operators: list, operands: list, cmdify_set={}, table=DB_TABLE_MEME):
 
 	for i,operator in enumerate(operators):
 		if i==0: continue
-		if operator in (K2A[';'], K2A[' ']):
+		if operator in (I[';'], I[' ']):
 			if state[0]:
 
 				# B'R:A -> A.R:B
-				if cmdify_set.get('inverse') and state[0][:3] == [K2A['@'],K2A["'"],K2A[':']]:
-					state[0][1]=K2A['.']
+				if cmdify_set.get('inverse') and state[0][:3] == [I['@'],I["'"],I[':']]:
+					state[0][1]=I['.']
 					state[1][0], state[1][2] = state[1][2], state[1][0]
 
 				cmd.append(state)
 				state = [[], []]
 
-			if operator==K2A[';']:
+			if operator==I[';']:
 				if cmd:
 					cmds.append(cmd)
 					cmd = []
@@ -464,33 +336,33 @@ def subquerify(cmd: list, table='meme'):
 
 	# Group statements logically
 	for statement in cmd:
-
-		if statement[0][0]==K2A['@'] and statement[1][0]==K2A['qry']:
+		if statement[0][0]==I['@'] and statement[1][0]==I['qry']:
+			qry_set[statement[1][1]]=True
 			continue
 
 		# Trim trailing semi-colon
-		if statement[0][-1]==K2A[';']:
-			statement[0] = statement[0][-1]
-			statement[1] = statement[1][-1]
+		if statement[0][-1]==I[';']:
+			statement[0].pop()
+			statement[1].pop()
 
 		last_operator = statement[0][-1] if statement else None
 		last_operand = statement[1][-1] if statement else None
 		if not last_operator: continue
 
 		# Handle =f (false)
-		if last_operator == K2A['='] and last_operand == K2A['f']:
+		if last_operator == I['='] and last_operand == I['f']:
 			false_cnt += 1
 			# all but last mexpression
 			false_group.append(statement)
 			continue
 
 		# Handle =g (get)
-		if last_operator == K2A['='] and last_operand == K2A['g']:
+		if last_operator == I['='] and last_operand == I['g']:
 			get_statements.append(statement)
 			continue
 
 		# Handle =tn (OR groups)
-		if last_operator == K2A['or']:
+		if last_operator == I['or']:
 			or_cnt += 1
 			if not or_groups.get(last_operand):
 				or_groups[last_operand]=[]
@@ -498,7 +370,7 @@ def subquerify(cmd: list, table='meme'):
 			continue
 
 		# Default: Add to true conditions
-		if last_operator >= K2A['=']: tg=interlace(statement[0][:-1], statement[1][:-1])
+		if last_operator >= I['=']: tg=interlace(statement[0][:-1], statement[1][:-1])
 		else: tg=interlace(statement[0], statement[1])
 
 		if not true_groups.get(tg): true_groups[tg]=[]
@@ -506,7 +378,7 @@ def subquerify(cmd: list, table='meme'):
 		true_cnt += 1
 
 	# If qry_set['all'] and no true/false/or conditions
-	if qry_set.get('all') and true_cnt == 0 and false_cnt == 0 and or_cnt == 0:
+	if qry_set.get(I['all']) and true_cnt == 0 and false_cnt == 0 and or_cnt == 0:
 		return [f"SELECT * FROM {table}", []]
 
 	params = []
@@ -526,7 +398,7 @@ def subquerify(cmd: list, table='meme'):
 				wheres.append(where_sql)
 				params.extend(qry_params)
 			else:
-				wheres.append(where_sql[where_sql.find('qnt')-4])
+				wheres.append(where_sql[0:where_sql.find('qnt')-4])
 				params.extend(qry_params[:-1])
 
 		# If not the first CTE, link it to previous CTE
@@ -572,7 +444,7 @@ def subquerify(cmd: list, table='meme'):
 
 
 	# select all data related to the matching As
-	if qry_set.get('all'):
+	if qry_set.get(I['all']):
 		sql_outs.append(f"SELECT aid as a0, rid as r0, bid as b0, qnt as q0 FROM {table} m0 WHERE m0.aid IN (SELECT a0 FROM z{cte_cnt})")
 		sql_outs.append(f"SELECT bid AS a0, rid{INVERSE} AS r0, aid AS b0, qnt AS q0 FROM {table} m0 WHERE m0.bid IN (SELECT a0 FROM z{cte_cnt})")
 
@@ -609,25 +481,25 @@ def selectify(statement, table='meme', aidOnly=False):
 	joins = [f"FROM {table} m0"]
 	selects = ['m0.aid AS a0','m0.rid AS r0','m0.bid AS b0','m0.qnt AS q0']
 	m = 0
-	opr = None
-	qnt = None
+	opr='!='
+	qnt='0'
 
 	for i, operator in enumerate(statement[0]):
 		operand = statement[1][i]
 
 		# A
-		if operator == K2A['@']:
+		if operator == I['@']:
 			wheres.append(f'm{m}.aid=%s')
 			params.append(operand)
 
 		# R
-		elif operator == K2A['.']:
+		elif operator == I['.']:
 			if operand is not None:
 				wheres.append(f'm{m}.rid=%s')
 				params.append(operand)
 
 		# RI
-		elif operator == K2A["'"]:
+		elif operator == I["'"]:
 			# flip the prior A to a B
 			selects[0] = f'm{m}.bid AS a{m}'
 			selects[1] = f"m{m}.rid{INVERSE} AS r{m}"
@@ -642,9 +514,9 @@ def selectify(statement, table='meme', aidOnly=False):
 				params.append(operand)
 
 		# B
-		elif operator == K2A[':']:
+		elif operator == I[':']:
 			# inverse if previous was RI or BB
-			if i > 0 and statement[0][i-1] in (K2A["'"], K2A['[bb]']):
+			if i > 0 and statement[0][i-1] in (I["'"], I['[bb]']):
 				wheres.append(f'm{m}.aid=%s')
 				params.append(operand)
 			else:
@@ -652,37 +524,39 @@ def selectify(statement, table='meme', aidOnly=False):
 				params.append(operand)
 
 		# equality operators
-		elif operator >= K2A['='] and operator <= K2A['>']:
-			opr = A2K[operator] 
+		elif operator >= I['='] and operator <= I['>']:
+			opr = K[operator] 
 
 		# decimal value
-		elif operator == K2A['#']:
+		elif operator == I['#']:
 			if not opr: raise Exception('opr dec')
 			qnt = float(operand)
 
-		# true/false value
-		elif operator in (K2A['t'], K2A['f']):
-			if opr!=K2A['=']: raise Exception('opr tf')
-			qnt=operator
+		# is true
+		elif operator == I['t']:
+			opr='!='
+			qnt='0'
+
+		# is false
+		elif operator == I['f']:
+			opr='='
+			qnt='0'
 
 
 		# JOINS (BA, BB, RA, RB)
 		else:
 			lm = m
 			m += 1
-			if operand is not None:
-				wheres.append(f'm{m}.rid=%s')
-				params.append(operand)
 
 			wheres.append(f"m{lm}.qnt{NOTFALSE}")
 
-			if operator == K2A['[ba]']:
+			if operator == I['[ba]']:
 				joins.append(f"JOIN {table} m{m} ON {selects[-2][:6]}=m{m}.aid")
 				selects.append(f"m{m}.aid AS a{m}")
 				selects.append(f"m{m}.rid AS r{m}")
 				selects.append(f"m{m}.bid AS b{m}")
 				selects.append(f"m{m}.qnt AS q{m}")
-			elif operator == K2A['[bb]']:
+			elif operator == I['[bb]']:
 				joins.append(f"JOIN {table} m{m} ON {selects[-2][:6]}=m{m}.bid")
 				selects.append(f"m{m}.bid AS a{m}")
 				selects.append(f"m{m}.rid{INVERSE} AS r{m}")
@@ -692,8 +566,7 @@ def selectify(statement, table='meme', aidOnly=False):
 				raise Exception('Error: unknown operator')
 
 	# last qnt condition
-	if qnt is None: wheres.append(f"m{m}.qnt{NOTFALSE}")
-	else: wheres.append(f"m{m}.qnt{opr}{qnt}")
+	wheres.append(f"m{m}.qnt{opr}{qnt}")
 
 	if aidOnly: selects = ['m0.aid AS a0']
 
@@ -706,22 +579,22 @@ def selectify(statement, table='meme', aidOnly=False):
 	]
 
 
-#### KEY-AID CONVERSION ####
+#### KEY-ID CONVERSION ####
 
 # Input list of key strings ['george_washington', 'john_adams']
-# Load key->aids in K2A and A2K caches
-# K2A['john_adams']=123
-# A2K[123]='john_adams'
+# Load key->aids in I and K caches
+# I['john_adams']=123
+# K[123]='john_adams'
 def aidcache(keys, table=DB_TABLE_NAME):
-	uncached_keys = [key for key in keys if key not in K2A]
+	uncached_keys = [key for key in keys if key not in I]
 
 	if not uncached_keys: return
 
 	rows=db.namegets([], [KEY], uncached_keys, table)
 
 	for row in rows:
-		K2A[row[3]] = int(row[0])
-		A2K[int(row[0])] = row[3]
+		I[row[3]] = int(row[0])
+		K[int(row[0])] = row[3]
 
 
 # Input value is a list of strings ['a', 'b', 'c', 'd']
@@ -729,7 +602,6 @@ def aidcache(keys, table=DB_TABLE_NAME):
 # Return the data with any keys with ids
 def identify(keys: list, table=DB_TABLE_NAME):
 	ids = []
-	missings=[]
 
 	if not keys: return ids
 
@@ -738,7 +610,7 @@ def identify(keys: list, table=DB_TABLE_NAME):
 	for key in keys:
 		if not isinstance(key, str): ids.append(key)
 		elif key.isdigit(): ids.append(int(key))
-		elif K2A.get(key): ids.append(K2A[key])
+		elif I.get(key): ids.append(I[key])
 		else: ids.append(key)
 
 	return ids
@@ -794,15 +666,13 @@ def get(mqry, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
 	sql, params = querify(mqry, meme_table)	
 	memes = db.select(sql, params)
 
-	if not memes: return output
-
 	for meme in memes:
-		ops = MEME2_OPS + [K2A[';']]
+		ops = FLOT_OPS + [I[';']]
 		meme = [int(meme[0]), int(meme[1]), int(meme[2]), None, float(meme[3]), None]
 		
 		if meme[1]%2:
 			meme[1] += 1
-			ops[1] = K2A["'"]
+			ops[1] = I["'"]
 
 		if meme[4] in (0,1):
 			ops[4] = meme[4]
@@ -837,19 +707,17 @@ def put (operators: list, operands: list, meme_table=DB_TABLE_MEME, name_table=D
 	suboperands=[]
 	for i, operator in enumerate(operators):
 		if i==0: continue
+		elif operator == I[' ']: raise Exception('space')
 
-		elif operator == K2A[' ']:
-			raise Exception('space')
-
-		elif operator != K2A[';']:
+		elif operator != I[';']:
 			operand=operands[i]
 
 			# Missing keys with no associated ID
 			if OPR[operator]['frm']=='aid':
 				if isinstance(operand, int): pass
 				elif isinstance(operand, str) and operand.isdigit(): operand=int(operand)
-				elif K2A.get(operand): operand=K2A[operand]
-				elif operator in (K2A['.'],K2A["'"]): missings[operand]=-1
+				elif I.get(operand): operand=I[operand]
+				elif operator in (I['.'],I["'"]): missings[operand]=-1
 				elif not missings.get(operand): missings[operand]=1
 
 			suboperators.append(operator)
@@ -867,7 +735,7 @@ def put (operators: list, operands: list, meme_table=DB_TABLE_MEME, name_table=D
 
 	# Missing keys with no associated ID
 	if missings:
-		aid = db.maxnum('aid', name_table) or K2A['cor']
+		aid = db.maxnum('aid', name_table) or I['cor']
 		for key, val in missings.items():
 			aid +=1
 			if val==0: continue
@@ -887,12 +755,12 @@ def put (operators: list, operands: list, meme_table=DB_TABLE_MEME, name_table=D
 	for i, operator in enumerate(operators):
 		if i==0: continue
 
-		elif operator != K2A[';']:
+		elif operator != I[';']:
 			operand=operands[i]
 			if OPR[operator]['frm']=='aid':
 				if isinstance(operand, int): pass
 				elif isinstance(operand, str) and operand.isdigit(): operand=int(operand)
-				elif K2A.get(operand): operand=K2A[operand]
+				elif I.get(operand): operand=I[operand]
 				else: raise Exception(f"missing {operand}")
 
 			suboperators.append(operator)
@@ -900,22 +768,16 @@ def put (operators: list, operands: list, meme_table=DB_TABLE_MEME, name_table=D
 
 		else:
 			if suboperators==NAME_OPS:
-				if suboperands[2]!=KEY:
-					name_memes.append(suboperands)
-
-			elif suboperators==MEME_OPS or suboperators==MEME2_OPS:
-				true_memes.append(suboperands)
-			else:
-				raise Exception(f"Unknown operators: "+ ' '.join(suboperators))
+				if suboperands[2]!=KEY: name_memes.append(suboperands)
+			elif suboperators==TRUE_OPS: true_memes.append(suboperands+[TRUQNT])
+			elif suboperators==FLOT_OPS: true_memes.append(suboperands)
+			else: raise Exception(f"Unknown operators: "+ ' '.join(suboperators))
 
 			suboperators=[]
 			suboperands=[]
 
-	if name_memes:
-		db.nameput(name_memes)
-
-	if true_memes:
-		db.memeput(true_memes)
+	if name_memes: db.nameput(name_memes)
+	if true_memes: db.memeput(true_memes)
 
 	return operators, operands
 
@@ -957,8 +819,8 @@ def read (file_path):
 			if len(operators)<2: continue
 
 			# End with semi colon
-			elif operators[-1]!=K2A[';']:
-				operators.append(K2A[';'])
+			elif operators[-1]!=I[';']:
+				operators.append(I[';'])
 				operands.append(None)
 			
 			output[0].extend(operators[1:])

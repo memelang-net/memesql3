@@ -8,8 +8,8 @@ DB_TABLE_MEME = 'meme'  # Default table name for memes
 DB_TABLE_NAME = 'name'  # Default table name for terms
 DB_TABLE_LOGI = 'logi'
 
-# Global dictionary to cache key->aid mappings
-K2A = {
+# Global dictionary to cache key->id mappings
+I = {
 	'f'    : 0,
 	't'    : 1,
 	'unk'  : 2,
@@ -54,8 +54,8 @@ K2A = {
 	'cor'  : 999999
 }
 
-# Global dictionary to cache aid->key mappings
-A2K = {
+# Global dictionary to cache id->key mappings
+K = {
 	0  : 'f',
 	1  : 't',
 	2  : 'unk',
@@ -98,14 +98,152 @@ A2K = {
 	999999 : 'cor'
 }
 
+NAM = I['nam']
+KEY = I['key']
+OPER = I['opr']
+MIX = I['mix']
+ID = I['id']
 
-NAM = K2A['nam']
-KEY = K2A['key']
-OPER = K2A['opr']
-MIX = K2A['mix']
-ID = K2A['id']
+NAME_OPS = [I['@'], I['.'], I[':'], I['='], I['$']]
+TRUE_OPS = [I['@'], I['.'], I[':'], I['t']]
+FLOT_OPS = [I['@'], I['.'], I[':'], I['='], I['#']]
 
 
-NAME_OPS = [K2A['@'], K2A['.'], K2A[':'], K2A['='], K2A['$']]
-MEME_OPS = [K2A['@'], K2A['.'], K2A[':'], K2A['='], K2A['t']]
-MEME2_OPS = [K2A['@'], K2A['.'], K2A[':'], K2A['='], K2A['#']]
+INVERSE = '-1'
+NOTFALSE = '!=0'
+TRUQNT = 1
+
+OPR = {
+	None: {
+		'long': None,
+		'shrt': None,
+		'grp': None,
+	},
+	I['t']: {
+		'long' : '=t',
+		'shrt' : '=t',
+		'grp' : I['='],
+		'frm' : 'aid',
+	},
+	I['f']: {
+		'long' : '=f',
+		'shrt' : '=f',
+		'grp' : I['='],
+		'frm' : 'aid',
+	},
+	I['g']: {
+		'long' : '=g',
+		'shrt' : '=g',
+		'grp' : I['='],
+		'frm' : 'aid',
+	},
+	I['@']: {
+		'long' : '',
+		'shrt' : '',
+		'grp' : I['@'],
+		'frm' : 'aid',
+	},
+	I["'"]: {
+		'long' : '\'',
+		'shrt' : '\'',
+		'grp' : I['.'],
+		'frm' : 'aid',
+	},
+	I['.']: {
+		'long' : '.',
+		'shrt' : '.',
+		'grp' : I['.'],
+		'frm' : 'aid',
+	},
+	I['[ba]'] : {
+		'long' : '[ba]',
+		'shrt' : '.',
+		'grp' : I['[ba]'],
+		'frm' : 'aid',
+	},
+	I['[bb]'] : {
+		'long' : '[bb]',
+		'shrt' : "'",
+		'grp' : I['[ba]'],
+		'frm' : 'aid',
+	},
+	I[':']: {
+		'long' : ':',
+		'shrt' : ':',
+		'grp' : I[':'],
+		'frm' : 'aid',
+	},
+	I['=']: {
+		'long' : '=',
+		'shrt' : '=',
+		'grp' : I['='],
+		'frm' : 'non',
+	},
+	I['!='] : {
+		'long' : '!=',
+		'shrt' : '!=',
+		'grp' : I['='],
+		'frm' : 'non',
+	},
+	I['>'] : {
+		'long' : '>',
+		'shrt' : '>',
+		'grp' : I['='],
+		'frm' : 'non',
+	},
+	I['>='] : {
+		'long' : '>=',
+		'shrt' : '>=',
+		'grp' : I['='],
+		'frm' : 'non',
+	},
+	I['<'] : {
+		'long' : '<',
+		'shrt' : '<',
+		'grp' : I['='],
+		'frm' : 'non',
+	},
+	I['<='] : {
+		'long' : '<=',
+		'shrt' : '<=',
+		'grp' : I['='],
+		'frm' : 'non',
+	},
+	I[' '] : {
+		'long' : ' ',
+		'shrt' : ' ',
+		'grp' : I[' '],
+		'frm' : 'end',
+	},
+	I[';'] : {
+		'long' : ';',
+		'shrt' : ';',
+		'grp' : I[';'],
+		'frm' : 'end',
+	},
+	I['#']: {
+		'long' : '',
+		'shrt' : '',
+		'grp' : I['#'],
+		'frm' : 'dec',
+	},
+	I['$']: {
+		'long' : '',
+		'shrt' : '',
+		'grp' : I['$'],
+		'frm' : 'str',
+	},
+}
+
+OPR_CHR = {
+	".": 1,
+	":": 1,
+	"'": 1,
+	"?": 1,
+	"=": 2,
+	"!": 2,
+	"#": 2,
+	">": 2,
+	"<": 2,
+	"[": 2,
+}

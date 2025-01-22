@@ -19,7 +19,7 @@ def sql(qry_sql):
 # Search for memes from a memelang query string
 def qry(mqry):
 	sql, params = memelang.querify(mqry, DB_TABLE_MEME, False)
-	#params, missings = memelang.identify(params)
+	params = memelang.identify(params)
 	full_sql = memelang.morfigy(sql, params)
 
 	print(f"\nSQL: {full_sql}\n")
@@ -92,13 +92,13 @@ def memeprint(operators, operands):
 	print(f"| {'A':<17} | {'R':<17} | {'B':<17} | {'Q':>16} |")
 	print(br)
 
-	if not length: print(f"| {'No matching memes':<76} |")
+	if length<2: print(f"| {'No matching memes':<76} |")
 		
 	else:
 		operands=list(map(str, operands))
 
 		for i in range(1, length, size):
-			if operators[i+1]==K2A["'"]:
+			if operators[i+1]==I["'"]:
 				operands[i+1]= "'"+operands[i+1]
 				
 			aid_str=f"{operands[i+0][:17]:<17}"
