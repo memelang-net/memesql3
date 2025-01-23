@@ -1,4 +1,4 @@
-# memesql2
+# memesql3
 
 These Python scripts receive [Memelang](https://memelang.net/) queries, convert them to SQL, then execute them on a Postgres database. 
 * Demo: https://demo.memelang.net/

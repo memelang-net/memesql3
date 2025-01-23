@@ -57,7 +57,7 @@ def tableadd():
 	commands = [
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid INTEGER, rid INTEGER, bid INTEGER, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_arb_idx ON {DB_TABLE_MEME} (aid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid INTEGER, bid INTEGER, quo VARCHAR(511)); CREATE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_quo_idx ON {DB_TABLE_NAME} (quo);\"",
-		#f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_LOGI} (v1 INTEGER, v2 INTEGER, opr INTEGER, v3 INTEGER, v4 INTEGER); CREATE INDEX {DB_TABLE_NAME}_v1_idx ON {DB_TABLE_LOGI} (v1,v2); CREATE INDEX {DB_TABLE_LOGI}_v3_idx ON {DB_TABLE_LOGI} (v3,v4);\"",
+		#f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_LOGI} (rid INTEGER, bid INTEGER, eql INTEGER, rid1 INTEGER, bid1 INTEGER); CREATE INDEX {DB_TABLE_NAME}_v1_idx ON {DB_TABLE_LOGI} (aid,rid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\""
 		#f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_LOGI} TO {DB_USER};\""
@@ -78,6 +78,13 @@ def tabledel():
 	for command in commands:
 		print(command)
 		os.system(command)
+
+
+def logitest():
+	operators, operands = memelang.delace('a.rz:bz=1;a.rx:bx=1;.rx:bx=>.ry:by;.rz:bz[ar]rj')
+	print(operators, operands)
+	memelang.logirb(operators, operands)
+	print(operators, operands)
 
 
 
@@ -136,5 +143,7 @@ if __name__ == "__main__":
 		tabledel()
 		tableadd()
 		putfile(LOCAL_DIR+'/core.meme')
+	elif sys.argv[1] == 'logitest':
+		logitest()
 	else:
 		sys.exit("MAIN.PY ERROR: Invalid command");

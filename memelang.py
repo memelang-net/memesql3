@@ -48,7 +48,8 @@ def delace(mqry):
 	operands = [MIX]
 	operation = 0
 
-	group_cnt = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0}
+	group_zero = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0, I['=>']: 0, I['[ar]']: 0}
+	group_cnt = group_zero.copy()
 	operator = None
 	group = None
 	opstr = ''
@@ -62,10 +63,10 @@ def delace(mqry):
 		if c == ';' or c.isspace():
 
 			# Assume is true
-			if group_cnt[I['=']]==0:
+			if group_cnt[I['=']]==0 and group_cnt[I['=>']]==0:
 				operation+=1
 				operators.append(I['t'])
-				operands.append(None)
+				operands.append(1)
 
 			operation+=1
 			operators.append(I[c])
@@ -73,7 +74,7 @@ def delace(mqry):
 
 			operator = None
 			group = None
-			group_cnt = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0}
+			group_cnt = group_zero.copy()
 
 			i += 1
 			continue
@@ -107,15 +108,21 @@ def delace(mqry):
 			if operator not in OPR:
 				raise Exception(f"Memelang parse error: Operator {opstr} not recognized at char {i} in {mqry}")
 
-			# Short -> long
-			if group_cnt[I['.']] > 0:
+			group = OPR[operator]['grp']
+
+			# Reset groups after implication
+			if group == I['=>']:
+				group_cnt = group_zero.copy()
+
+			# Short -> long for second . or '
+			elif group == I['.'] and group_cnt[I['.']] > 0:
 				if operator == I['.']: operator=I['[ba]']   # .R.R
 				elif operator == I["'"]: operator=I['[bb]'] # 'R'R
+				group = OPR[operator]['grp']
 
 			operation+=1
 			operators.append(operator)
 			operands.append(None)
-			group = OPR[operator]['grp']
 			group_cnt[group] += 1
 
 			# error checks
@@ -171,6 +178,7 @@ def delace(mqry):
 				tm = re.match(r't(\d+)$', operand)
 				if tm:
 					operators[operation]=I['t']
+					operands[operation]=1
 					operation+=1
 					operators.append(I['or'])
 					operands.append(int(tm.group(1)))
@@ -200,7 +208,7 @@ def delace(mqry):
 				operators.append(I['@'])
 				operands.append(operand)
 
-			# String following R or B
+			# String following R B [ar] [br]
 			elif group in (I['.'], I[':']):
 				operands[operation]=operand
 
@@ -260,6 +268,8 @@ def interlace(operators, operands, interlace_set={}):
 # Output [[[operator, operator], [operand, operand]]]
 def cmdify(operators: list, operands: list, cmdify_set={}, table=DB_TABLE_MEME):
 
+	if not operators: return []
+
 	if operators[-1]!=I[';']:
 		operators.append(I[';'])
 		operands.append(None)
@@ -270,21 +280,15 @@ def cmdify(operators: list, operands: list, cmdify_set={}, table=DB_TABLE_MEME):
 
 	for i,operator in enumerate(operators):
 		if i==0: continue
-		if operator in (I[';'], I[' ']):
+		elif operator in (I[';'], I[' ']):
 			if state[0]:
-
-				# B'R:A -> A.R:B
-				if cmdify_set.get('inverse') and state[0][:3] == [I['@'],I["'"],I[':']]:
-					state[0][1]=I['.']
-					state[1][0], state[1][2] = state[1][2], state[1][0]
-
 				cmd.append(state)
 				state = [[], []]
 
-			if operator==I[';']:
-				if cmd:
-					cmds.append(cmd)
-					cmd = []
+			if operator==I[';'] and cmd:
+				cmds.append(cmd)
+				cmd = []
+
 		else:
 			state[0].append(operator)
 			state[1].append(operands[i])
@@ -698,6 +702,11 @@ def count(mqry, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
 def put (operators: list, operands: list, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
 	if not operators: return
 
+	# Last operator should be ;
+	if operators[-1]!=I[';']:
+		operators.append(I[';'])
+		operands.append(None)
+
 	# Load IDs
 	aidcache(operands)
 
@@ -832,3 +841,60 @@ def read (file_path):
 def write (file_path, operators: list, operands: list):
 	with open(file_path, 'w', encoding='utf-8') as file:
 		file.write(interlace(operators, operands, {'newline':True}))
+
+
+
+#### LOGI ####
+
+def logify (aid: int, operators: list, operands: list):
+	logi_operators, logi_operands = logiget (aid, operators, operands)
+	operators+=logi_operators[1:]
+	operands+logi_operands[1:]
+	logirb(operators, operands)
+
+
+def logiget (aid: int, operators: list, operands: list):
+
+	rbs=[]
+	params=[]
+	logi_operators = [OPER]
+	logi_operands = [ID]
+	cmds=cmdify(operators, operands)
+
+	for cmd in cmds:
+		for suboperators, suboperands in cmd:
+			if suboperators[0:3]==[I['@'], I['.'], I[':']] and suboperands[0]==aid:
+				rbs.append(f"(rid=%s AND bid=%s)")
+				params.extend([suboperands[0], suboperands[1]])
+
+	if not rbs: return logi_operators, logi_operands
+
+	logi_memes = db.select("SELECT rid, bid, eql, rid1, bid1 FROM logi WHERE " + ' OR '.join(rbs), params)
+
+	for logi_meme in logi_memes:
+		logi_operators.extend([I['.'], I[':'], logi_meme[2], I['.'], I[':']])
+		logi_operands.extend([logi_meme[0], logi_meme[1], None, logi_meme[3], logi_meme[4]])
+
+	return logi_operators, logi_operands
+
+
+def logirb (operators: list, operands: list):
+
+	rbrb = {}
+	cmds=cmdify(operators, operands)
+
+	# Pull out .R:B logic rules
+	for cmd in cmds:
+		for suboperators, suboperands in cmd:
+			if len(suboperators)>3 and suboperators[0:2] == [I['.'], I[':']]:
+				if not rbrb.get(suboperands[0]): rbrb[suboperands[0]]={}
+				if not rbrb[suboperands[0]].get(suboperands[1]): rbrb[suboperands[0]][suboperands[1]]=[]
+				rbrb[suboperands[0]][suboperands[1]].append([suboperators[2:], suboperands[2:]])
+
+	# Apply logic rules to A where A.R:B=t
+	for cmd in cmds:
+		for suboperators, suboperands in cmd:
+			if suboperators in (TRUE_OPS, FLOT_OPS) and rbrb.get(suboperands[1]) and rbrb[suboperands[1]].get(suboperands[2]):
+				for logi_operators, logi_operands in rbrb[suboperands[1]][suboperands[2]]:
+					operators.extend([I['@']] + logi_operators)
+					operands.extend(suboperands[0:1] + logi_operands)
