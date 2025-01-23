@@ -48,7 +48,7 @@ def delace(mqry):
 	operands = [MIX]
 	operation = 0
 
-	group_zero = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0, I['=>']: 0, I['[ar]']: 0}
+	group_zero = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0, I['=>']: 0}
 	group_cnt = group_zero.copy()
 	operator = None
 	group = None
@@ -66,7 +66,7 @@ def delace(mqry):
 			if group_cnt[I['=']]==0 and group_cnt[I['=>']]==0:
 				operation+=1
 				operators.append(I['t'])
-				operands.append(1)
+				operands.append(None)
 
 			operation+=1
 			operators.append(I[c])
@@ -152,9 +152,8 @@ def delace(mqry):
 				else:
 					operand += ch
 
-			operation+=1
-			operators.append(I['$'])
-			operands.append(operand)
+			operators[operation]=I['$']
+			operands[operation]=operand
 			operator = None
 			group = None
 			continue
@@ -166,9 +165,12 @@ def delace(mqry):
 				operand += mqry_chars[i]
 				i += 1
 
-			if operand in ('t','f','g'):
+			if operand in ('0','1'):
 				if operator != I['=']: raise Exception(f"Memelang parse error: {operand} not after =")
+				operators[operation]=int(operand)
 
+			elif operand in ('t','f','g','ar','br','q'):
+				if operator != I['=']: raise Exception(f"Memelang parse error: {operand} not after =")
 				operators[operation]=I[operand]
 		
 			# =tn for or-group
@@ -178,7 +180,7 @@ def delace(mqry):
 				tm = re.match(r't(\d+)$', operand)
 				if tm:
 					operators[operation]=I['t']
-					operands[operation]=1
+					operands[operation]=None
 					operation+=1
 					operators.append(I['or'])
 					operands.append(int(tm.group(1)))
@@ -187,9 +189,8 @@ def delace(mqry):
 			# floating point number
 			else:
 				try:
-					operation+=1
-					operators.append(I['#'])
-					operands.append(float(operand))
+					operators[operation]=I['#']
+					operands[operation]=float(operand)
 				except ValueError:
 					raise Exception(f"Memelang parse error: Malformed number {operand} at char {i} in {mqry}")
 
@@ -208,7 +209,7 @@ def delace(mqry):
 				operators.append(I['@'])
 				operands.append(operand)
 
-			# String following R B [ar] [br]
+			# String following R B
 			elif group in (I['.'], I[':']):
 				operands[operation]=operand
 
@@ -256,7 +257,7 @@ def interlace(operators, operands, interlace_set={}):
 			if operand is not None:
 			  mqry += '<var class="v' + str(operator) + '">' + html.escape(str(operand)) + '</var>'
 		else:
-			mqry += opstr + str(operand)
+			mqry += opstr + (str(operand) if operand is not None else '')
 
 	if interlace_set.get('html'):
 		mqry+='</code>'
@@ -546,12 +547,10 @@ def selectify(statement, table='meme', aidOnly=False):
 			opr='='
 			qnt='0'
 
-
 		# JOINS (BA, BB, RA, RB)
 		else:
 			lm = m
 			m += 1
-
 			wheres.append(f"m{lm}.qnt{NOTFALSE}")
 
 			if operator == I['[ba]']:
@@ -697,94 +696,63 @@ def count(mqry, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
 	return len(db.select(sql, params))
 
 
-# Input meme array
-# Write to DB
 def put (operators: list, operands: list, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
-	if not operators: return
-
-	# Last operator should be ;
-	if operators[-1]!=I[';']:
-		operators.append(I[';'])
-		operands.append(None)
+	if not operators: return operators, operands
 
 	# Load IDs
 	aidcache(operands)
 
-	missings={}
-	key_memes=[]
-	suboperators=[]
-	suboperands=[]
-	for i, operator in enumerate(operators):
-		if i==0: continue
-		elif operator == I[' ']: raise Exception('space')
+	missings = {}
+	key_memes = []
+	name_memes = []
+	true_memes = []
 
-		elif operator != I[';']:
-			operand=operands[i]
+	# Convert operands to IDs where possible
+	for o, operator in enumerate(operators):
+		if OPR[operator]['frm']=='aid':
+			if isinstance(operands[o], int): pass
+			elif isinstance(operands[o], str) and operands[o].isdigit(): operands[o]=int(operands[o])
+			elif I.get(operands[o]): operands[o]=I[operands[o]]
 
 			# Missing keys with no associated ID
-			if OPR[operator]['frm']=='aid':
-				if isinstance(operand, int): pass
-				elif isinstance(operand, str) and operand.isdigit(): operand=int(operand)
-				elif I.get(operand): operand=I[operand]
-				elif operator in (I['.'],I["'"]): missings[operand]=-1
-				elif not missings.get(operand): missings[operand]=1
+			elif operator in (I['.'],I["'"]): missings[operands[o]]=-1
+			elif not missings.get(operands[o]): missings[operands[o]]=1
 
-			suboperators.append(operator)
-			suboperands.append(operand)
+	# Structure input
+	cmds=cmdify(operators, operands)
 
-		# Keys with associated ID
-		else:
-			if suboperators==NAME_OPS:
-				if suboperands[2]==KEY:
-					missings[suboperands[4]]=0
-					key_memes.append([int(suboperands[0]), NAM, KEY, None, suboperands[4]])
-
-			suboperators=[]
-			suboperands=[]
+	# Pull out ID-KEYs
+	for c, cmd in enumerate(cmds):
+		for suboperators, suboperands in cmd:
+			if suboperators == [I['@'], I['.'], I[':'], I['='], I['$']] and cmd[c][1][2]==KEY:
+				missings[suboperands[4]]=0
+				key_memes.append([int(cmd[c][1][0]), NAM, KEY, None, cmd[c][1][4]])
 
 	# Missing keys with no associated ID
 	if missings:
 		aid = db.maxnum('aid', name_table) or I['cor']
 		for key, val in missings.items():
-			aid +=1
 			if val==0: continue
+			aid +=1
 			if val==-1 and aid%2: aid+=1
 			key_memes.append([aid, NAM, KEY, None, key])
 
-	# Write keys and reload
+	# Write keys and reload IDs
 	if key_memes:
 		db.nameput(key_memes)
-		aidcache(operands)
+		operands=identify(operands)
+		cmds=cmdify(operators, operands)
 
 	# Pull out names and trues
-	name_memes=[]
-	true_memes=[]
-	suboperators=[]
-	suboperands=[]
-	for i, operator in enumerate(operators):
-		if i==0: continue
-
-		elif operator != I[';']:
-			operand=operands[i]
-			if OPR[operator]['frm']=='aid':
-				if isinstance(operand, int): pass
-				elif isinstance(operand, str) and operand.isdigit(): operand=int(operand)
-				elif I.get(operand): operand=I[operand]
-				else: raise Exception(f"missing {operand}")
-
-			suboperators.append(operator)
-			suboperands.append(operand)
-
-		else:
+	for c, cmd in enumerate(cmds):
+		for suboperators, suboperands in cmd:
 			if suboperators==NAME_OPS:
-				if suboperands[2]!=KEY: name_memes.append(suboperands)
-			elif suboperators==TRUE_OPS: true_memes.append(suboperands+[TRUQNT])
-			elif suboperators==FLOT_OPS: true_memes.append(suboperands)
-			else: raise Exception(f"Unknown operators: "+ ' '.join(suboperators))
+				if cmd[c][1][2]!=KEY: name_memes.append(cmd[c][1])
+			elif suboperators==TRUE_OPS: true_memes.append(cmd[c][1]+[TRUQNT])
+			elif suboperators==FLOT_OPS: true_memes.append(cmd[c][1])
+			# else: raise Exception(f"Unknown operators: "+ ' '.join(suboperators))
 
-			suboperators=[]
-			suboperands=[]
-
+	# Write names and trues
 	if name_memes: db.nameput(name_memes)
 	if true_memes: db.memeput(true_memes)
 
@@ -846,10 +814,12 @@ def write (file_path, operators: list, operands: list):
 
 #### LOGI ####
 
+# .RID:BID => .RID1:BID1=EQL
+
 def logify (aid: int, operators: list, operands: list):
-	logi_operators, logi_operands = logiget (aid, operators, operands)
-	operators+=logi_operators[1:]
-	operands+logi_operands[1:]
+	logioperators, logioperands = logiget (aid, operators, operands)
+	operators+=logioperators[1:]
+	operands+logioperands[1:]
 	logirb(operators, operands)
 
 
@@ -857,25 +827,30 @@ def logiget (aid: int, operators: list, operands: list):
 
 	rbs=[]
 	params=[]
-	logi_operators = [OPER]
-	logi_operands = [ID]
+	logioperators = [OPER]
+	logioperands = [ID]
 	cmds=cmdify(operators, operands)
 
 	for cmd in cmds:
-		for suboperators, suboperands in cmd:
-			if suboperators[0:3]==[I['@'], I['.'], I[':']] and suboperands[0]==aid:
+		for operators, operands in cmd:
+			if operators[0:3]==[I['@'], I['.'], I[':']] and operands[0]==aid:
 				rbs.append(f"(rid=%s AND bid=%s)")
-				params.extend([suboperands[0], suboperands[1]])
+				params.extend([operands[0], operands[1]])
 
-	if not rbs: return logi_operators, logi_operands
+	if not rbs: return logioperators, logioperands
 
-	logi_memes = db.select("SELECT rid, bid, eql, rid1, bid1 FROM logi WHERE " + ' OR '.join(rbs), params)
+	logi_memes = db.select("SELECT rid, bid, rid1, bid1, eql FROM impl WHERE " + ' OR '.join(rbs), params)
 
 	for logi_meme in logi_memes:
-		logi_operators.extend([I['.'], I[':'], logi_meme[2], I['.'], I[':']])
-		logi_operands.extend([logi_meme[0], logi_meme[1], None, logi_meme[3], logi_meme[4]])
+		if logi_meme[2]:
+			logioperators.extend([I['.'], I[':'], I['=>'], I['.'], I[':'], logi_meme[4]])
+			logioperands.extend([logi_meme[0], logi_meme[1], None, logi_meme[2], logi_meme[3], None])
+		else:
+			logioperators.extend([I['.'], I[':'], I['=>'], I['.'], logi_meme[4]])
+			logioperands.extend([logi_meme[0], logi_meme[1], None, logi_meme[3], None])
 
-	return logi_operators, logi_operands
+
+	return logioperators, logioperands
 
 
 def logirb (operators: list, operands: list):
@@ -886,15 +861,20 @@ def logirb (operators: list, operands: list):
 	# Pull out .R:B logic rules
 	for cmd in cmds:
 		for suboperators, suboperands in cmd:
-			if len(suboperators)>3 and suboperators[0:2] == [I['.'], I[':']]:
+			if len(suboperators)>3 and suboperators[2] == I['=>']:
 				if not rbrb.get(suboperands[0]): rbrb[suboperands[0]]={}
 				if not rbrb[suboperands[0]].get(suboperands[1]): rbrb[suboperands[0]][suboperands[1]]=[]
-				rbrb[suboperands[0]][suboperands[1]].append([suboperators[2:], suboperands[2:]])
+				rbrb[suboperands[0]][suboperands[1]].append([suboperators[3:], suboperands[3:]])
 
 	# Apply logic rules to A where A.R:B=t
 	for cmd in cmds:
 		for suboperators, suboperands in cmd:
 			if suboperators in (TRUE_OPS, FLOT_OPS) and rbrb.get(suboperands[1]) and rbrb[suboperands[1]].get(suboperands[2]):
-				for logi_operators, logi_operands in rbrb[suboperands[1]][suboperands[2]]:
-					operators.extend([I['@']] + logi_operators)
-					operands.extend(suboperands[0:1] + logi_operands)
+				for logioperators, logioperands in rbrb[suboperands[1]][suboperands[2]]:
+
+					if logioperators[-1]==I['q']: 
+						logioperators[-1]=suboperators[-1]
+						logioperands[-1]=suboperands[-1]
+
+					operators.extend([I['@']] + logioperators + [I[';']])
+					operands.extend(suboperands[0:1] + logioperands + [None])

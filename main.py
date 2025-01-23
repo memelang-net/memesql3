@@ -57,10 +57,10 @@ def tableadd():
 	commands = [
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid INTEGER, rid INTEGER, bid INTEGER, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_arb_idx ON {DB_TABLE_MEME} (aid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid INTEGER, bid INTEGER, quo VARCHAR(511)); CREATE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_quo_idx ON {DB_TABLE_NAME} (quo);\"",
-		#f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_LOGI} (rid INTEGER, bid INTEGER, eql INTEGER, rid1 INTEGER, bid1 INTEGER); CREATE INDEX {DB_TABLE_NAME}_v1_idx ON {DB_TABLE_LOGI} (aid,rid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_IMPL} (rid INTEGER, bid INTEGER, rid1 INTEGER, bid1 INTEGER, eql INTEGER); CREATE INDEX {DB_TABLE_NAME}_v1_idx ON {DB_TABLE_IMPL} (aid,rid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\""
-		#f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_LOGI} TO {DB_USER};\""
+		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_IMPL} TO {DB_USER};\""
 	]
 
 	for command in commands:
@@ -73,6 +73,7 @@ def tabledel():
 	commands = [
 		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_MEME};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_NAME};\""
+		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_IMPL};\""
 	]
 
 	for command in commands:
@@ -81,10 +82,12 @@ def tabledel():
 
 
 def logitest():
-	operators, operands = memelang.delace('a.rz:bz=1;a.rx:bx=1;.rx:bx=>.ry:by;.rz:bz[ar]rj')
+	operators, operands = memelang.delace('a.rz:bz=1;a.rx:bx=1;.rx:bx=>.ry:by=q;.rz:bz=>.rj=ar')
 	print(operators, operands)
+	print(len(operators), len(operands))
 	memelang.logirb(operators, operands)
-	print(operators, operands)
+	print(len(operators), len(operands))
+	print(memelang.interlace(operators, operands,{'newline':True}))
 
 
 

@@ -5,8 +5,8 @@ DB_USER = 'memeuser'  # Username for MySQL/Postgres
 DB_PASSWORD = 'memepswd'  # Password for MySQL/Postgres
 DB_NAME = 'memedb'  # Database name for MySQL/Postgres
 DB_TABLE_MEME = 'meme'  # Default table name for memes
-DB_TABLE_NAME = 'name'  # Default table name for terms
-DB_TABLE_LOGI = 'logi'
+DB_TABLE_NAME = 'name'  # Default table name for names
+DB_TABLE_IMPL = 'impl'
 
 # Global dictionary to cache key->id mappings
 I = {
@@ -38,8 +38,9 @@ I = {
 	'$'    : 23,
 
 	'=>'   : 25,
-	'[ar]' : 26,
-	'[br]' : 26,
+	'ar'   : 26,
+	'br'   : 26,
+	'q'    : 29,
 	
 	' '	   : 30,
 	';'	   : 31,
@@ -86,8 +87,9 @@ K = {
 	23 : '$',
 
 	25 : '=>',
-	26 : '[ar]',
-	27 : '[br]',
+	26 : 'ar',
+	27 : 'br',
+	29 : 'q',
 
 	30 : ' ',
 	31 : ';',
@@ -112,10 +114,10 @@ OPER = I['opr']
 MIX = I['mix']
 ID = I['id']
 
-NAME_OPS = [I['@'], I['.'], I[':'], I['='], I['$']]
+NAME_OPS = [I['@'], I['.'], I[':'], I['$']]
 TRUE_OPS = [I['@'], I['.'], I[':'], I['t']]
-FLOT_OPS = [I['@'], I['.'], I[':'], I['='], I['#']]
-LOGI_OPS = [I['.'], I[':'], I['=>'], I['.'], I[':']]
+FLOT_OPS = [I['@'], I['.'], I[':'], I['#']]
+IMPL_OPS = [I['.'], I[':'], I['=>'], I['.'], I[':'], I['=']]
 
 
 INVERSE = '-1'
@@ -231,14 +233,14 @@ OPR = {
 		'frm' : 'end',
 	},
 	I['#']: {
-		'long' : '',
-		'shrt' : '',
+		'long' : '=',
+		'shrt' : '=',
 		'grp' : I['#'],
 		'frm' : 'dec',
 	},
 	I['$']: {
-		'long' : '"',
-		'shrt' : '"',
+		'long' : '="',
+		'shrt' : '="',
 		'grp' : I['$'],
 		'frm' : 'str',
 	},
@@ -248,16 +250,22 @@ OPR = {
 		'grp' : I['=>'],
 		'frm' : 'non',
 	},
-	I['[ar]']: {
-		'long' : '[ar]',
-		'shrt' : '[ar]',
-		'grp' : I['[ba]'],
+	I['ar']: {
+		'long' : '=ar',
+		'shrt' : '=ar',
+		'grp' : I['='],
 		'frm' : 'aid',
 	},
-	I['[br]']: {
-		'long' : '[br]',
-		'shrt' : '[br]',
-		'grp' : I['[ba]'],
+	I['br']: {
+		'long' : '=br',
+		'shrt' : '=br',
+		'grp' : I['='],
+		'frm' : 'aid',
+	},
+	I['q']: {
+		'long' : '=q',
+		'shrt' : '=q',
+		'grp' : I['='],
 		'frm' : 'aid',
 	},
 }

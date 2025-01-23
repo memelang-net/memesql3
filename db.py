@@ -179,7 +179,7 @@ def namegets(aids: list = [], bids: list = [], quos: list = [], table: str = Non
 
 def logiput (logis: list, table: str = None):
 	if not logis: return
-	if not table: table=DB_TABLE_LOGI
+	if not table: table=DB_TABLE_IMPL
 
 	sql_inserts = []
 	for logi in logis:
@@ -190,7 +190,7 @@ def logiput (logis: list, table: str = None):
 
 
 def logicut (v1: int, v2: int, opr: int, v3: int, v4: int, table: str = None):
-	if not table: table=DB_TABLE_LOGI
+	if not table: table=DB_TABLE_IMPL
 	db.insert(f"DELETE FROM {table} WHERE v1={v1} AND v2={v2} AND opr={opr} AND v3={v3} AND v4={v4}")
 
 
@@ -199,7 +199,7 @@ def logiwip (v: int, table: str = None):
 
 
 def logigets(memes: list, table: str = None):
-	if not table: table = DB_TABLE_LOGI
+	if not table: table = DB_TABLE_IMPL
 
 	wheres = []
 	iwheres = []
