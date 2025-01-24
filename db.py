@@ -45,7 +45,11 @@ def memeput (memes: list, table: str = None):
 		aid=int(meme[0])
 		rid=int(meme[1])
 		bid=int(meme[2])
-		qnt=1 if meme[4]==1 else float(meme[4])
+
+		if meme[4]==I['f']: qnt=0
+		elif meme[4]==I['t']: qnt=1
+		elif meme[4]==I['#']: qnt=float(meme[4])
+		else: continue
 
 		if rid==NAM: continue
 		if meme[3] is not None: continue
@@ -95,7 +99,7 @@ def memeget (aid: int = 0, rid: int = 0, bid: int = 0, table=None):
 
 	if not conds: raise Exception('No conds')
 
-	return select(f"SELECT aid, rid, bid, qnt FROM {table} WHERE " + ' AND '.join(conds), [])
+	return select(f"SELECT aid, rid, bid, NULL, qnt FROM {table} WHERE " + ' AND '.join(conds), [])
 
 
 #### NAME SQL ####
@@ -116,7 +120,7 @@ def nameput (names: list, table: str = None):
 		bid=int(name[2])
 
 		if rid!=NAM: continue
-		if not aid and name[4]!=K[0]: raise ValueError(f"Empty aid")
+		if not aid: raise ValueError(f"Empty aid")
 		if not bid: raise ValueError(f"Empty bid")
 
 		sql_inserts.append(f"(%s, %s, %s)")
@@ -179,7 +183,7 @@ def namegets(aids: list = [], bids: list = [], quos: list = [], table: str = Non
 
 def logiput (logis: list, table: str = None):
 	if not logis: return
-	if not table: table=DB_TABLE_IMPL
+	if not table: table=DB_TABLE_LOGI
 
 	sql_inserts = []
 	for logi in logis:
@@ -190,7 +194,7 @@ def logiput (logis: list, table: str = None):
 
 
 def logicut (v1: int, v2: int, opr: int, v3: int, v4: int, table: str = None):
-	if not table: table=DB_TABLE_IMPL
+	if not table: table=DB_TABLE_LOGI
 	db.insert(f"DELETE FROM {table} WHERE v1={v1} AND v2={v2} AND opr={opr} AND v3={v3} AND v4={v4}")
 
 
@@ -199,7 +203,7 @@ def logiwip (v: int, table: str = None):
 
 
 def logigets(memes: list, table: str = None):
-	if not table: table = DB_TABLE_IMPL
+	if not table: table = DB_TABLE_LOGI
 
 	wheres = []
 	iwheres = []

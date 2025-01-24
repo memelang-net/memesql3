@@ -1,49 +1,50 @@
 
 # Database configuration constants
-DB_HOST = 'localhost'  # Host for MySQL/Postgres
-DB_USER = 'memeuser'  # Username for MySQL/Postgres
-DB_PASSWORD = 'memepswd'  # Password for MySQL/Postgres
-DB_NAME = 'memedb'  # Database name for MySQL/Postgres
+DB_HOST = 'localhost'  # Host for MySQL/Poseqres
+DB_USER = 'memeuser'  # Username for MySQL/Poseqres
+DB_PASSWORD = 'memepswd'  # Password for MySQL/Poseqres
+DB_NAME = 'memedb'  # Database name for MySQL/Poseqres
 DB_TABLE_MEME = 'meme'  # Default table name for memes
 DB_TABLE_NAME = 'name'  # Default table name for names
-DB_TABLE_IMPL = 'impl'
+DB_TABLE_LOGI = 'logi'
 
 # Global dictionary to cache key->id mappings
 I = {
-	'f'    : 0,
-	't'    : 1,
-	'unk'  : 2,
+	'@'    : 1,
+	'[a]'  : 1,
+	'.'    : 2,
+	'[r]'  : 2,
+	"'"    : 3,
+	'`'    : 3,
+	'[i]'  : 3,
 
-	'@'    : 3,
+	'[b=a]' : 4,
+	'[b=b]' : 5,
 
-	'.'    : 4,
-	"'"    : 5,
-	'[aa]' : 4,
-	'[ab]' : 5,
-	'[ba]' : 6,
-	'[bb]' : 7,
+	':'    : 9,
+	'[b]'  : 9,
 
-	':'    : 8,
+	'='    : 10,
+	'!='   : 11,
+	'<'    : 12,
+	'>='   : 13,
+	'<='   : 14,
+	'>'    : 15,
 
-	'='    : 9,
-	'!='   : 10,
-	'<'    : 11,
-	'>='   : 12,
-	'<='   : 13,
-	'>'    : 14,
+	'f'    : 20,
+	't'    : 21,
+	'g'	   : 22,
+	'#'    : 23,
+	'$'    : 24,
+	'or'   : 25,
 
-	'g'	   : 20,
-	'or'   : 21,
-	'#'    : 22,
-	'$'    : 23,
-
-	'=>'   : 25,
-	'ar'   : 26,
-	'br'   : 26,
-	'q'    : 29,
+	'=>'    : 28,
+	'[q=q]': 28,
+	'[a.r]'   : 30,
+	'[a`r]'   : 32,
 	
-	' '	   : 30,
-	';'	   : 31,
+	' '	   : 40,
+	';'	   : 41,
 
 	'qry'  : 88,
 
@@ -53,6 +54,7 @@ I = {
 	'key'  : 99,
 	'tit'  : 100,
 
+	'unk'  : 900,
 	'all'  : 901,
 	'mix'  : 903,
 
@@ -61,38 +63,36 @@ I = {
 
 # Global dictionary to cache id->key mappings
 K = {
-	0  : 'f',
-	1  : 't',
-	2  : 'unk',
+	1  : '@',
 
-	3  : '@',
+	2  : '.',
+	3  : "'",
 
-	4  : '.',
-	5  : "'",
-	6 : '[ba]',
-	7 : '[bb]',
+	4 : '[b=a]',
+	5 : '[b=b]',
 
-	8  : ':',
+	0  : ':',
 
-	9  : '=',
-	10 : '!=',
-	11 : '<',
-	12 : '>=',
-	13 : '<=',
-	14 : '>',
+	10  : '=',
+	11 : '!=',
+	12 : '<',
+	13 : '>=',
+	14 : '<=',
+	15 : '>',
 
-	20 : 'g',
-	21 : 'or',
-	22 : '#',
-	23 : '$',
+	20  : 'f',
+	21  : 't',
+	22 : 'g',
+	23 : 'or',
+	24 : '#',
+	25 : '$',
 
-	25 : '=>',
-	26 : 'ar',
-	27 : 'br',
-	29 : 'q',
+	28 : '[q=q]',
+	30 : '[a.r]',
+	32: '[a`r]',
 
-	30 : ' ',
-	31 : ';',
+	40 : ' ',
+	41 : ';',
 	
 	88 : 'qry',
 
@@ -102,6 +102,7 @@ K = {
 	99 : 'key',
 	100 : 'tit',
 
+	900  : 'unk',
 	901 : 'all',
 	903 : 'mix',
 
@@ -114,159 +115,164 @@ OPER = I['opr']
 MIX = I['mix']
 ID = I['id']
 
-NAME_OPS = [I['@'], I['.'], I[':'], I['$']]
-TRUE_OPS = [I['@'], I['.'], I[':'], I['t']]
-FLOT_OPS = [I['@'], I['.'], I[':'], I['#']]
-IMPL_OPS = [I['.'], I[':'], I['=>'], I['.'], I[':'], I['=']]
+NAME_OPS = [I['@'], I['.'], I[':'], I['='], I['$']]
+TRUE_OPS = [I['@'], I['.'], I[':'], I['='], I['t']]
+FLOT_OPS = [I['@'], I['.'], I[':'], I['='], I['#']]
+IMPL_OPS = [I['.'], I[':'], I['=>'], I['.'], I[':']]
+AREL_OPS = [I['.'], I[':'], I['[a.r]'], I['.']]
+BREL_OPS = [I['.'], I[':'], I['[a`r]'], I['.']]
 
 
 INVERSE = '-1'
 NOTFALSE = '!=0'
 TRUQNT = 1
 
+SEQ_A = 1
+SEQ_R = 2
+SEQ_RR = 3
+SEQ_B = 4
+SEQ_EQL = 5
+SEQ_VAL = 6
+SEQ_QQ = 7
+SEQ_AND = 8
+SEQ_END = 9
+
 OPR = {
 	None: {
 		'long': None,
 		'shrt': None,
-		'grp': None,
-	},
-	I['t']: {
-		'long' : '=t',
-		'shrt' : '=t',
-		'grp' : I['='],
-		'frm' : 'aid',
-	},
-	I['f']: {
-		'long' : '=f',
-		'shrt' : '=f',
-		'grp' : I['='],
-		'frm' : 'aid',
-	},
-	I['g']: {
-		'long' : '=g',
-		'shrt' : '=g',
-		'grp' : I['='],
-		'frm' : 'aid',
 	},
 	I['@']: {
-		'long' : '',
+		'long' : '[a]',
 		'shrt' : '',
-		'grp' : I['@'],
 		'frm' : 'aid',
+		'seq' : SEQ_A,
 	},
-	I["'"]: {
-		'long' : '\'',
-		'shrt' : '\'',
-		'grp' : I['.'],
+	I['`']: {
+		'long' : '[i]',
+		'shrt' : '`',
 		'frm' : 'aid',
+		'seq' : SEQ_R,
 	},
 	I['.']: {
-		'long' : '.',
+		'long' : '[r]',
 		'shrt' : '.',
-		'grp' : I['.'],
 		'frm' : 'aid',
+		'seq' : SEQ_R,
 	},
-	I['[ba]'] : {
-		'long' : '[ba]',
+	I['[b=a]'] : {
+		'long' : '[b=a]',
 		'shrt' : '.',
-		'grp' : I['[ba]'],
 		'frm' : 'aid',
+		'seq' : SEQ_RR,
 	},
-	I['[bb]'] : {
-		'long' : '[bb]',
+	I['[b=b]'] : {
+		'long' : '[b=b]',
 		'shrt' : "'",
-		'grp' : I['[ba]'],
 		'frm' : 'aid',
+		'seq' : SEQ_RR,
 	},
 	I[':']: {
-		'long' : ':',
+		'long' : '[b]',
 		'shrt' : ':',
-		'grp' : I[':'],
 		'frm' : 'aid',
+		'seq' : SEQ_B,
 	},
 	I['=']: {
 		'long' : '=',
 		'shrt' : '=',
-		'grp' : I['='],
 		'frm' : 'non',
+		'seq' : SEQ_EQL,
 	},
 	I['!='] : {
 		'long' : '!=',
 		'shrt' : '!=',
-		'grp' : I['='],
 		'frm' : 'non',
+		'seq' : SEQ_EQL,
 	},
 	I['>'] : {
 		'long' : '>',
 		'shrt' : '>',
-		'grp' : I['='],
 		'frm' : 'non',
+		'seq' : SEQ_EQL,
 	},
 	I['>='] : {
 		'long' : '>=',
 		'shrt' : '>=',
-		'grp' : I['='],
 		'frm' : 'non',
+		'seq' : SEQ_EQL,
 	},
 	I['<'] : {
 		'long' : '<',
 		'shrt' : '<',
-		'grp' : I['='],
 		'frm' : 'non',
+		'seq' : SEQ_EQL,
 	},
 	I['<='] : {
 		'long' : '<=',
 		'shrt' : '<=',
-		'grp' : I['='],
 		'frm' : 'non',
+		'seq' : SEQ_EQL,
+	},
+	I['t']: {
+		'long' : 't',
+		'shrt' : 't',
+		'frm' : 'aid',
+		'seq' : SEQ_VAL,
+	},
+	I['f']: {
+		'long' : 'f',
+		'shrt' : 'f',
+		'frm' : 'aid',
+		'seq' : SEQ_VAL,
+	},
+	I['g']: {
+		'long' : 'g',
+		'shrt' : 'g',
+		'frm' : 'aid',
+		'seq' : SEQ_VAL,
+	},
+	I['#']: {
+		'long' : '',
+		'shrt' : '',
+		'frm' : 'dec',
+		'seq' : SEQ_VAL,
+	},
+	I['$']: {
+		'long' : '"',
+		'shrt' : '"',
+		'frm' : 'str',
+		'seq' : SEQ_VAL,
+	},
+	I['[a.r]']: {
+		'long' : '[a.r]',
+		'shrt' : '[a.r]',
+		'frm' : 'non',
+		'seq' : SEQ_QQ,
+	},
+	I['[a`r]']: {
+		'long' : '[a`r]',
+		'shrt' : '[a`r]',
+		'frm' : 'non',
+		'seq' : SEQ_QQ,
+	},
+	I['=>']: {
+		'long' : '[q=q]',
+		'shrt' : '=>',
+		'frm' : 'non',
+		'seq' : SEQ_QQ,
 	},
 	I[' '] : {
 		'long' : ' ',
 		'shrt' : ' ',
-		'grp' : I[' '],
-		'frm' : 'end',
+		'frm' : 'non',
+		'seq' : SEQ_AND,
 	},
 	I[';'] : {
 		'long' : ';',
 		'shrt' : ';',
-		'grp' : I[';'],
-		'frm' : 'end',
-	},
-	I['#']: {
-		'long' : '=',
-		'shrt' : '=',
-		'grp' : I['#'],
-		'frm' : 'dec',
-	},
-	I['$']: {
-		'long' : '="',
-		'shrt' : '="',
-		'grp' : I['$'],
-		'frm' : 'str',
-	},
-	I['=>']: {
-		'long' : '=>',
-		'shrt' : '=>',
-		'grp' : I['=>'],
 		'frm' : 'non',
-	},
-	I['ar']: {
-		'long' : '=ar',
-		'shrt' : '=ar',
-		'grp' : I['='],
-		'frm' : 'aid',
-	},
-	I['br']: {
-		'long' : '=br',
-		'shrt' : '=br',
-		'grp' : I['='],
-		'frm' : 'aid',
-	},
-	I['q']: {
-		'long' : '=q',
-		'shrt' : '=q',
-		'grp' : I['='],
-		'frm' : 'aid',
+		'seq' : SEQ_END,
 	},
 }
 
@@ -274,6 +280,7 @@ OPR_CHR = {
 	".": 1,
 	":": 1,
 	"'": 1,
+	'`': 1,
 	"?": 1,
 	"=": 2,
 	"!": 2,

@@ -48,10 +48,9 @@ def delace(mqry):
 	operands = [MIX]
 	operation = 0
 
-	group_zero = {I[':']: 0, I['.']: 0, I['=']: 0, I['[ba]']: 0, I['=>']: 0}
-	group_cnt = group_zero.copy()
 	operator = None
-	group = None
+	seqcnt = 1
+	sequence = SEQ_A
 	opstr = ''
 
 	i = 0
@@ -63,7 +62,10 @@ def delace(mqry):
 		if c == ';' or c.isspace():
 
 			# Assume is true
-			if group_cnt[I['=']]==0 and group_cnt[I['=>']]==0:
+			if seqcnt == 1 and sequence < SEQ_EQL:
+				operation+=1
+				operators.append(I['='])
+				operands.append(None)
 				operation+=1
 				operators.append(I['t'])
 				operands.append(None)
@@ -73,9 +75,8 @@ def delace(mqry):
 			operands.append(None)
 
 			operator = None
-			group = None
-			group_cnt = group_zero.copy()
-
+			sequence = SEQ_A
+			seqcnt = 1
 			i += 1
 			continue
 
@@ -87,50 +88,51 @@ def delace(mqry):
 
 		# Operators
 		elif c in OPR_CHR:
+			opstr = c
+			j = 1
 
 			# [xx]
 			if c == '[':
-				opstr = mqry[i:i+4]
-				j=4
-
+				# Collect up to 6 more characters or until you find a ']'
+				while j < 6 and (i + j) < mqry_cnt:
+					cc = mqry_chars[i + j]
+					opstr += cc
+					j += 1
+					if cc == ']': break
 			else:
-				opstr = ''
-				j = 0
-				while j < 3 and (i+j) < mqry_cnt:
-					cc = mqry_chars[i+j]
-					if cc in I and (j == 0 or OPR_CHR.get(cc) == 2):
-						opstr += cc
-						j += 1
-					else: break
+				# Collect up to 3 more valid operator characters
+				while j < 3 and (i + j) < mqry_cnt:
+					cc = mqry_chars[i + j]
+					if not OPR_CHR.get(cc) or OPR_CHR[cc] < 2: break
+					opstr += cc
+					j += 1
+
 
 			operator = I[opstr]
 
 			if operator not in OPR:
 				raise Exception(f"Memelang parse error: Operator {opstr} not recognized at char {i} in {mqry}")
 
-			group = OPR[operator]['grp']
-
-			# Reset groups after implication
-			if group == I['=>']:
-				group_cnt = group_zero.copy()
+			# Reset sequence after implication
+			if OPR[operator]['seq'] >= SEQ_QQ: 
+				sequence = SEQ_A
+				seqcnt += 1
 
 			# Short -> long for second . or '
-			elif group == I['.'] and group_cnt[I['.']] > 0:
-				if operator == I['.']: operator=I['[ba]']   # .R.R
-				elif operator == I["'"]: operator=I['[bb]'] # 'R'R
-				group = OPR[operator]['grp']
+			elif sequence == SEQ_R and OPR[operator]['seq'] == SEQ_R:
+				if operator == I['.']: operator=I['[b=a]']   # .R.R
+				elif operator == I['`']: operator=I['[b=b]'] # 'R'R
+				sequence = OPR[operator]['seq']
+
+			elif OPR[operator]['seq'] < sequence:
+				raise Exception(f"Memelang parse error: Unexpected operator {opstr} at char {i} in {mqry}")
+
+			else:
+				sequence = OPR[operator]['seq']
 
 			operation+=1
 			operators.append(operator)
 			operands.append(None)
-			group_cnt[group] += 1
-
-			# error checks
-			if group == I['.'] and group_cnt[I[':']] > 0:
-				raise Exception(f"Memelang parse error: Errant R after B at char {i} in {mqry}")
-
-			if group == I['='] and group_cnt[I['=']] > 1:
-				raise Exception(f"Memelang parse error: Extraneous equality operator at char {i} in {mqry}")
 
 			i += j
 			continue
@@ -155,23 +157,23 @@ def delace(mqry):
 			operators[operation]=I['$']
 			operands[operation]=operand
 			operator = None
-			group = None
 			continue
 
 		# String/number following equal sign
-		elif group == I['=']:
+		elif sequence == SEQ_EQL:
 
 			while i < mqry_cnt and re.match(r'[a-z0-9_\.\-]', mqry_chars[i]):
 				operand += mqry_chars[i]
 				i += 1
 
-			if operand in ('0','1'):
-				if operator != I['=']: raise Exception(f"Memelang parse error: {operand} not after =")
-				operators[operation]=int(operand)
+			if operand=='0': operand='f'
+			elif operand=='1': operand='t'
 
-			elif operand in ('t','f','g','ar','br','q'):
+			if operand in ('t','f','g'):
 				if operator != I['=']: raise Exception(f"Memelang parse error: {operand} not after =")
-				operators[operation]=I[operand]
+				operation+=1
+				operators.append(I[operand])
+				operands.append(None)
 		
 			# =tn for or-group
 			elif operand.startswith('t'):
@@ -179,8 +181,9 @@ def delace(mqry):
 
 				tm = re.match(r't(\d+)$', operand)
 				if tm:
-					operators[operation]=I['t']
-					operands[operation]=None
+					operation+=1
+					operators.append(I['t'])
+					operands.append(None)
 					operation+=1
 					operators.append(I['or'])
 					operands.append(int(tm.group(1)))
@@ -189,13 +192,13 @@ def delace(mqry):
 			# floating point number
 			else:
 				try:
-					operators[operation]=I['#']
-					operands[operation]=float(operand)
+					operation+=1
+					operators.append(I['#'])
+					operands.append(float(operand))
 				except ValueError:
 					raise Exception(f"Memelang parse error: Malformed number {operand} at char {i} in {mqry}")
 
 			operator = None
-			group = None
 			continue
 
 		else:
@@ -204,26 +207,19 @@ def delace(mqry):
 				i += 1
 
 			# A string
-			if group is None:
+			if sequence == SEQ_A:
 				operation+=1
 				operators.append(I['@'])
 				operands.append(operand)
 
-			# String following R B
-			elif group in (I['.'], I[':']):
+			# String following R B or [x=x]
+			elif sequence in (SEQ_R, SEQ_B, SEQ_RR):
 				operands[operation]=operand
-
-			# String following [xx] is .R
-			elif group == I['[ba]']:
-				operation+=1
-				operators.append(I['.'])
-				operands.append(operand)
 
 			else:
 				raise Exception(f"Memelang parse error: Unexpected character '{mqry_chars[i]}' at char {i} in {mqry}")
 
 			operator = None
-			group = None
 			continue
 
 	return operators, operands
@@ -241,6 +237,7 @@ def interlace(operators, operands, interlace_set={}):
 		if i==0: continue
 		opstr = OPR[operator]['shrt'] if interlace_set.get('short') else OPR[operator]['long']
 		operand = operands[i]
+		eopstr = None
 
 		# Special cases
 		if operator == I['#']:
@@ -250,14 +247,16 @@ def interlace(operators, operands, interlace_set={}):
 		elif operator == I[';'] and interlace_set.get('newline'):
 			opstr+="\n"
 
+		elif operator == I['"']:
+			eopstr='"'
+
 		# Append the interlaced expression
 		if interlace_set.get('html'):
-			if opstr:
-				mqry += html.escape(opstr)
-			if operand is not None:
-			  mqry += '<var class="v' + str(operator) + '">' + html.escape(str(operand)) + '</var>'
+			if opstr: mqry += html.escape(opstr)
+			if operand is not None: mqry += '<var class="v' + str(operator) + '">' + html.escape(str(operand)) + '</var>'
+			if eopstr: mqry += html.escape(eopstr)
 		else:
-			mqry += opstr + (str(operand) if operand is not None else '')
+			mqry += opstr + (str(operand) if operand is not None else '') + (eopstr if eopstr is not None else '')
 
 	if interlace_set.get('html'):
 		mqry+='</code>'
@@ -375,7 +374,7 @@ def subquerify(cmd: list, table='meme'):
 			continue
 
 		# Default: Add to true conditions
-		if last_operator >= I['=']: tg=interlace(statement[0][:-1], statement[1][:-1])
+		if OPR[last_operator]['seq'] >= SEQ_EQL: tg=interlace(statement[0][:-1], statement[1][:-1])
 		else: tg=interlace(statement[0], statement[1])
 
 		if not true_groups.get(tg): true_groups[tg]=[]
@@ -396,7 +395,7 @@ def subquerify(cmd: list, table='meme'):
 	for true_group in true_groups.values():
 		wheres = []
 		cte_cnt += 1
-		# Each bid_group is a list of mstates
+		# Each bid_group is a list of mseqcnt
 		for statement in true_group:
 			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(statement, table)
 			if not wheres:
@@ -414,7 +413,7 @@ def subquerify(cmd: list, table='meme'):
 		cte_outs.append((cte_cnt, qry_depth))
 
 	# Process OR groups
-	# Each key in or_groups is an integer (the tn), or_groups[key] is a list of mstates
+	# Each key in or_groups is an integer (the tn), or_groups[key] is a list of mseqcnt
 	for or_group in or_groups.values():
 		cte_cnt += 1
 		max_depth = 0
@@ -504,7 +503,7 @@ def selectify(statement, table='meme', aidOnly=False):
 				params.append(operand)
 
 		# RI
-		elif operator == I["'"]:
+		elif operator == I['`']:
 			# flip the prior A to a B
 			selects[0] = f'm{m}.bid AS a{m}'
 			selects[1] = f"m{m}.rid{INVERSE} AS r{m}"
@@ -521,7 +520,7 @@ def selectify(statement, table='meme', aidOnly=False):
 		# B
 		elif operator == I[':']:
 			# inverse if previous was RI or BB
-			if i > 0 and statement[0][i-1] in (I["'"], I['[bb]']):
+			if i > 0 and statement[0][i-1] in (I['`'], I['[b=b]']):
 				wheres.append(f'm{m}.aid=%s')
 				params.append(operand)
 			else:
@@ -529,7 +528,7 @@ def selectify(statement, table='meme', aidOnly=False):
 				params.append(operand)
 
 		# equality operators
-		elif operator >= I['='] and operator <= I['>']:
+		elif OPR[operator]['seq'] == SEQ_EQL:
 			opr = K[operator] 
 
 		# decimal value
@@ -551,15 +550,20 @@ def selectify(statement, table='meme', aidOnly=False):
 		else:
 			lm = m
 			m += 1
+
+			if operand is not None:
+				wheres.append(f'm{m}.rid=%s')
+				params.append(operand)
+
 			wheres.append(f"m{lm}.qnt{NOTFALSE}")
 
-			if operator == I['[ba]']:
+			if operator == I['[b=a]']:
 				joins.append(f"JOIN {table} m{m} ON {selects[-2][:6]}=m{m}.aid")
 				selects.append(f"m{m}.aid AS a{m}")
 				selects.append(f"m{m}.rid AS r{m}")
 				selects.append(f"m{m}.bid AS b{m}")
 				selects.append(f"m{m}.qnt AS q{m}")
-			elif operator == I['[bb]']:
+			elif operator == I['[b=b]']:
 				joins.append(f"JOIN {table} m{m} ON {selects[-2][:6]}=m{m}.bid")
 				selects.append(f"m{m}.bid AS a{m}")
 				selects.append(f"m{m}.rid{INVERSE} AS r{m}")
@@ -675,10 +679,10 @@ def get(mqry, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
 		
 		if meme[1]%2:
 			meme[1] += 1
-			ops[1] = I["'"]
+			ops[1] = I['`']
 
-		if meme[4] in (0,1):
-			ops[4] = meme[4]
+		if meme[4] == 0: ops[4] = I['f']
+		elif meme[4] == 1: ops[4] = I['t']
 
 		output[0].extend(ops)
 		output[1].extend(meme)
@@ -715,7 +719,7 @@ def put (operators: list, operands: list, meme_table=DB_TABLE_MEME, name_table=D
 			elif I.get(operands[o]): operands[o]=I[operands[o]]
 
 			# Missing keys with no associated ID
-			elif operator in (I['.'],I["'"]): missings[operands[o]]=-1
+			elif operator in (I['.'],I['`']): missings[operands[o]]=-1
 			elif not missings.get(operands[o]): missings[operands[o]]=1
 
 	# Structure input
@@ -839,15 +843,15 @@ def logiget (aid: int, operators: list, operands: list):
 
 	if not rbs: return logioperators, logioperands
 
-	logi_memes = db.select("SELECT rid, bid, rid1, bid1, eql FROM impl WHERE " + ' OR '.join(rbs), params)
+	logi_memes = db.select("SELECT rid, bid, opr, rid1, bid1 FROM impl WHERE " + ' OR '.join(rbs), params)
 
 	for logi_meme in logi_memes:
-		if logi_meme[2]:
-			logioperators.extend([I['.'], I[':'], I['=>'], I['.'], I[':'], logi_meme[4]])
-			logioperands.extend([logi_meme[0], logi_meme[1], None, logi_meme[2], logi_meme[3], None])
+		if logi_meme[4]:
+			logioperators.extend([I['.'], I[':'], logi_meme[2], I['.'], I[':']])
+			logioperands.extend([logi_meme[0], logi_meme[1], None, logi_meme[2], logi_meme[3]])
 		else:
-			logioperators.extend([I['.'], I[':'], I['=>'], I['.'], logi_meme[4]])
-			logioperands.extend([logi_meme[0], logi_meme[1], None, logi_meme[3], None])
+			logioperators.extend([I['.'], I[':'], logi_meme[2], I['.']])
+			logioperands.extend([logi_meme[0], logi_meme[1], None, logi_meme[3]])
 
 
 	return logioperators, logioperands
@@ -861,10 +865,10 @@ def logirb (operators: list, operands: list):
 	# Pull out .R:B logic rules
 	for cmd in cmds:
 		for suboperators, suboperands in cmd:
-			if len(suboperators)>3 and suboperators[2] == I['=>']:
+			if len(suboperators)>3 and suboperators[2] in (I['[q=q]'], I['[a.r]'], I['[a`r]']):
 				if not rbrb.get(suboperands[0]): rbrb[suboperands[0]]={}
 				if not rbrb[suboperands[0]].get(suboperands[1]): rbrb[suboperands[0]][suboperands[1]]=[]
-				rbrb[suboperands[0]][suboperands[1]].append([suboperators[3:], suboperands[3:]])
+				rbrb[suboperands[0]][suboperands[1]].append([suboperators[2:], suboperands[2:]])
 
 	# Apply logic rules to A where A.R:B=t
 	for cmd in cmds:
@@ -872,9 +876,11 @@ def logirb (operators: list, operands: list):
 			if suboperators in (TRUE_OPS, FLOT_OPS) and rbrb.get(suboperands[1]) and rbrb[suboperands[1]].get(suboperands[2]):
 				for logioperators, logioperands in rbrb[suboperands[1]][suboperands[2]]:
 
-					if logioperators[-1]==I['q']: 
-						logioperators[-1]=suboperators[-1]
-						logioperands[-1]=suboperands[-1]
+					if logioperators[0]==I['[q=q]']:
+						del logioperators[0]
+						del logioperands[0]
+						logioperators.append(suboperators[-1])
+						logioperands.append(suboperands[-1])
 
 					operators.extend([I['@']] + logioperators + [I[';']])
 					operands.extend(suboperands[0:1] + logioperands + [None])
