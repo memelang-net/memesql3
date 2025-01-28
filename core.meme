@@ -1,9 +1,8 @@
-
 1.nam:key="@"
 2.nam:key="."
 3.nam:key="'"
-4.nam:key="[b=a]"
-5.nam:key="[b=b]"
+4.nam:key="[.]"
+5.nam:key="[']"
 
 9.nam:key=":"
 
@@ -13,19 +12,18 @@
 13.nam:key=">="
 14.nam:key="<="
 15.nam:key=">"
+16.nam:key="#"
+17.nam:key="$"
 
-20.nam:key="f"
-21.nam:key="t"
-22.nam:key="g"
-23.nam:key="or"
-24.nam:key="#"
-25.nam:key="$"
+20.nam:key="|"
+21.nam:key="&"
+22.nam:key=";"
 
-40.nam:key=" "
-41.nam:key=";"
-
+80.nam:key="f"
+81.nam:key="t"
+82.nam:key="g"
 88.nam:key="qry"
-90.nam:key="quo"
+90.nam:key="str"
 
 97.nam:key="opr"
 98.nam:key="id"
@@ -43,6 +41,7 @@
 306.nam:key="inc"
 306.nam:tit="Increment"
 
+800.nam:key="is"
 900.nam:key="unk"
 901.nam:key="all"
 902.nam:key="mix"
