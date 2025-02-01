@@ -1,4 +1,5 @@
 from conf import *
+from memelang import *
 import sys
 import os
 import re
@@ -79,7 +80,7 @@ def tabledel():
 def logitest():
 	operators, operands = memelang.delace('a]rz:bz=1;a]rx:bx=1;rx[bx]ry:by=t;rz[bz]rj')
 	print(operators, operands)
-	memelang.alrbeqify(operators, operands)
+	memelang.normalize(operators, operands)
 	print(operators, operands)
 	memelang.logify(operators, operands)
 	print(memelang.interlace(operators, operands,{'newline':True}))
@@ -97,11 +98,10 @@ def memeprint(operators, operands):
 
 	for cmd in cmds:
 		for suboperators, suboperands in cmd:
-			if suboperators[:4]==ALRB and suboperands[1] in (I['is'], 'is', I['lgc'], 'lgc'):
+			if suboperators[:4]==ALRB and suboperands[1] in (I['is'], 'is', I['of'], 'of'):
 				found = True
-				if suboperators[4]==I['=']:
-					meme=list(map(str, suboperands))
-					print(f"| {meme[0][:17]:<17} | {meme[2][:17]:<17} | {meme[3][:17]:<17} | {meme[5].rstrip('0').rstrip('.')[:16]:>16} |")
+				meme=list(map(str, suboperands))
+				print(f"| {meme[0][:17]:<17} | {meme[2][:17]:<17} | {meme[3][:17]:<17} | {meme[5].rstrip('0').rstrip('.')[:16]:>16} |")
 
 
 	if not found: print(f"| {'No matching memes':<76} |")
