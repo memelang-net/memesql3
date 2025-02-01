@@ -17,7 +17,7 @@ def sql(qry_sql):
 
 # Search for memes from a memelang query string
 def qry(mqry):
-	sql, params = memelang.querify(mqry, DB_AIRBEQ, False)
+	sql, params = memelang.querify(mqry, DB_ALRBEQ, False)
 	params = memelang.identify(params)
 	full_sql = memelang.morfigy(sql, params)
 
@@ -53,9 +53,9 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_AIRBEQ} (aid BIGINT, iid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_AIRBEQ}_airb_idx ON {DB_AIRBEQ} (aid,iid,rid,bid); CREATE INDEX {DB_AIRBEQ}_rid_idx ON {DB_AIRBEQ} (rid); CREATE INDEX {DB_AIRBEQ}_bid_idx ON {DB_AIRBEQ} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_ALRBEQ} (aid BIGINT, lid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_ALRBEQ}_airb_idx ON {DB_ALRBEQ} (aid,lid,rid,bid); CREATE INDEX {DB_ALRBEQ}_rid_idx ON {DB_ALRBEQ} (rid); CREATE INDEX {DB_ALRBEQ}_bid_idx ON {DB_ALRBEQ} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_ABS} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE INDEX {DB_ABS}_aid_idx ON {DB_ABS} (aid); CREATE INDEX {DB_ABS}_bid_idx ON {DB_ABS} (bid); CREATE INDEX {DB_ABS}_str_idx ON {DB_ABS} (str);\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_AIRBEQ} TO {DB_USER};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_ALRBEQ} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_ABS} TO {DB_USER};\"",
 	]
 
@@ -67,7 +67,7 @@ def tableadd():
 # Delete database table
 def tabledel():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_AIRBEQ};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_ALRBEQ};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_ABS};\"",
 	]
 
@@ -77,11 +77,11 @@ def tabledel():
 
 
 def logitest():
-	operators, operands = memelang.delace('a.rz:bz=1;a.rx:bx=1;bx\'rx.ry:by=t;bz\'rz.rj')
+	operators, operands = memelang.delace('a]rz:bz=1;a]rx:bx=1;rx[bx]ry:by=t;rz[bz]rj')
 	print(operators, operands)
-	memelang.airbeqify(operators, operands)
+	memelang.alrbeqify(operators, operands)
 	print(operators, operands)
-	memelang.logirb(operators, operands)
+	memelang.logify(operators, operands)
 	print(memelang.interlace(operators, operands,{'newline':True}))
 
 
@@ -97,13 +97,11 @@ def memeprint(operators, operands):
 
 	for cmd in cmds:
 		for suboperators, suboperands in cmd:
-			if suboperators[:4]==AIRB and suboperands[1] in (I['is'], 'is'):
+			if suboperators[:4]==ALRB and suboperands[1] in (I['is'], 'is', I['lgc'], 'lgc'):
 				found = True
 				if suboperators[4]==I['=']:
-					if suboperands[4]==I['t']: suboperands[4]='TRUE'
-					elif suboperands[4]==I['f']: suboperands[4]='FALSE'
-				meme=list(map(str, suboperands))
-				print(f"| {meme[0][:17]:<17} | {meme[2][:17]:<17} | {meme[3][:17]:<17} | {meme[4].rstrip('0').rstrip('.')[:16]:>16} |")
+					meme=list(map(str, suboperands))
+					print(f"| {meme[0][:17]:<17} | {meme[2][:17]:<17} | {meme[3][:17]:<17} | {meme[5].rstrip('0').rstrip('.')[:16]:>16} |")
 
 
 	if not found: print(f"| {'No matching memes':<76} |")

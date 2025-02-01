@@ -25,7 +25,7 @@ def selnum(query: str):
 
 
 def maxnum(col: str = 'aid', table: str = None):
-	if not table: table=DB_AIRBEQ
+	if not table: table=DB_ALRBEQ
 	result = select(f"SELECT MAX({col}) FROM {table}")
 	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
 
@@ -33,14 +33,14 @@ def maxnum(col: str = 'aid', table: str = None):
 # Input aid, bid, str
 # Delete one row from DB
 def memecut (aid: int = 0, rid: int = 0, bid: int = 0, table: str = None):
-	if not table: table=DB_AIRBEQ
+	if not table: table=DB_ALRBEQ
 	insert(f"DELETE FROM {table} WHERE aid={aid} AND rid={rid} AND bid={bid}")
 
 
 # Input aid (optional), rid (optional), bid (optional)
 # Delete multiple rows from DB
 def memewip (aid: int = 0, rid: int = 0, bid: int = 0, table: str = None):
-	if not table: table=DB_AIRBEQ
+	if not table: table=DB_ALRBEQ
 	conds = []
 	if aid: conds.append(f"aid={aid}")
 	if rid: conds.append(f"rid={rid}")
@@ -54,7 +54,7 @@ def memewip (aid: int = 0, rid: int = 0, bid: int = 0, table: str = None):
 # Input aid (optional), rid (optional), bid (optional)
 # Select multiple rows from DB
 def memeget (aid: int = 0, rid: int = 0, bid: int = 0, table=None):
-	if not table: table=DB_AIRBEQ
+	if not table: table=DB_ALRBEQ
 	conds = []
 	if aid: conds.append(f"aid={aid}")
 	if rid: conds.append(f"rid={rid}")
@@ -68,14 +68,14 @@ def memeget (aid: int = 0, rid: int = 0, bid: int = 0, table=None):
 # Input aid, bid, str
 # Delete one row from DB
 def namecut (aid: int, bid: int, string: str, table: str = None):
-	if not table: table=DB_AIRBEQ
+	if not table: table=DB_ALRBEQ
 	insert(f"DELETE FROM {table} WHERE aid=%s AND bid=%s AND str=%s", [int(aid), int(bid), string])
 
 
 # Input aid, bid (optional)
 # Delete multiple rows from DB
 def namewip (aid: int, bid: int, table: str = None):
-	if not table: table=DB_AIRBEQ
+	if not table: table=DB_ALRBEQ
 	if not aid: raise ValueError('aid')
 	elif bid: insert(f"DELETE FROM {table} WHERE aid={aid} AND bid={bid}")
 	else: insert(f"DELETE FROM {table} WHERE aid={aid}")
@@ -84,7 +84,7 @@ def namewip (aid: int, bid: int, table: str = None):
 # Input aid, bid(optional)
 # Output names from DB
 def nameget(aid: int, bid: int = 0, table: str = None):
-	if not table: table=DB_AIRBEQ
+	if not table: table=DB_ALRBEQ
 	aid=int(aid)
 	bid=int(bid)
 	return select(f"SELECT aid, {NAM}, bid, str FROM {table} WHERE aid={aid}" + (f" AND bid={bid}" if bid else ''))
