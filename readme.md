@@ -9,7 +9,6 @@ These Python scripts receive [Memelang](https://memelang.net/) queries, convert 
 ## Files
 
 * *conf.py* database configurations
-* *core.meme* core memelang keys and aids to be loaded into the DB
 * *db.py* library for executing Postgres queries
 * *main.py* CLI interface for queries and testing
 * *memelang.py* library to parse Memelang queries
@@ -47,7 +46,7 @@ Installation on Ubuntu:
 
 Execute a query:
 
-	# python3 ./main.py get "john_adams.spouse"
+	# python3 ./main.py get "john_adams]spouse]"
 
 Outputs:
 

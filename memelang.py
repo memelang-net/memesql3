@@ -308,6 +308,7 @@ OPSIDE = {
 		'<=' : I['L<='],
 		'!=' : I['L!='],
 		'[' : I['L'],
+		'|' : I['R'],
 		']' : I['R'],
 		' ' : I['And'],
 		';' : I['End'],
@@ -457,7 +458,7 @@ def delace(mqry: str):
 			operators.append(OPSIDE[side]['"'])
 			operands.append(operand)
 
-		# String/number
+		# key/int/float
 		else:
 			while i < mqry_len and re.match(r'[a-z0-9_\.\-]', mqry_chars[i]):
 				operand += mqry_chars[i]
@@ -495,7 +496,6 @@ def delace(mqry: str):
 				operators.append(OPSIDE[side]['.'])
 				operands.append(float(operand))
 
-
 			else: raise Exception(f"Memelang parse error: Unexpected '{operand}' at char {i} in {mqry}")
 
 	return operators, operands
@@ -513,13 +513,13 @@ def interlace(operators: list, operands: list, interlace_set={}):
 
 		# Special case: decimal number
 		if OPR[operator]['form'] == DEC:
-			if '.' not in str(operand):
+			if '.' not in operand:
 				if float(operand)>0:
-					if float(operand)>1: operand = str(operand) + '.0'
-					else: operand = '0.' + str(operand)
+					if float(operand)>1: operand = operand + '.0'
+					else: operand = '0.' + operand
 				else:
-					if float(operand)<-1: operand = str(operand) + '.0'
-					else: operand = '-0.' + str(abs(operand))
+					if float(operand)<-1: operand = operand + '.0'
+					else: operand = '-0.' + operand[1:]
 
 		elif OPR[operator]['form'] == NON:
 			operand = OPR[operator]['str']
@@ -549,15 +549,21 @@ def normalize (operators: list, operands: list):
 		o+=1
 		operator=operators[o]
 
-		# A[R]B => A[is[R]B
-		if operator==I['A'] and OPR[operators[o+1]]['func']==REL and operators[o+2]==I['B']:
+		# A]R] => A[is]R]
+		if operator==I['A'] and operators[o+1]==I['R']:
+			operators.insert(o+1, I['L'])
+			operands.insert(o+1, I['is'])
+			olen += 1
+
+		# A[R]B => A[is]R]B
+		elif operator==I['A'] and operators[o+1]==I['L'] and operators[o+2]==I['B']:
 			operators.insert(o+1, I['L'])
 			operands.insert(o+1, I['is'])
 			operators[o+2]=I['R']
 			olen += 1
 
 		# ;A => ;t=A
-		if False and OPR[operators[o]]['side']==CLOSE and operators[o+1]==I['A']:
+		elif False and OPR[operators[o]]['side']==CLOSE and operators[o+1]==I['A']:
 			operators.insert(o+1, I['L1'])
 			operands.insert(o+1, 1)
 			operators.insert(o+2, I['L='])
@@ -788,8 +794,8 @@ def selectify(statement, table=None, aidOnly=False):
 	joins = [f"FROM {table} m0"]
 	selects = ['m0.aid AS a0','m0.lid AS l0','m0.rid AS r0','m0.bid AS b0','m0.eid AS e0','m0.qnt AS q0']
 	m = 0
-	opr='!='
-	val='0'
+	opr=None
+	val=None
 
 	for i, operator in enumerate(statement[0]):
 		operand = statement[1][i]
@@ -806,7 +812,9 @@ def selectify(statement, table=None, aidOnly=False):
 			params.append(operand)
 
 		# equality operators # > <
-		elif func == EQL: opr = string
+		elif func == EQL: 
+			opr = string
+			#if side==LEFT: wheres.append(f"m{m}.qnt{opr}{val}")
 
 		# value
 		elif func == VAL:
@@ -816,27 +824,18 @@ def selectify(statement, table=None, aidOnly=False):
 				val='0'
 			elif form==DEC: val = str(float(operand))
 			else: raise Exception('invalid form')
+			if side==RIGHT: wheres.append(f"m{m}.qnt{opr}{val}")
 
 		# REL
-		# TODO: Redo this logic, which is probably wrong
 		elif func == REL:
-			if dpth == 1:
-				if operand<0:
-					# flip the prior A to a B
-					selects[0] = f'm{m}.bid AS a{m}'
-					selects[1] = f"m{m}.rid AS l{m}"
-					selects[2] = f"m{m}.lid AS r{m}"
-					selects[3] = f'm{m}.aid AS b{m}'
-					if i > 0 and OPR[operators[i-1]]['func']==AB:
-						wheres[-1] = f'm{m}.bid=%s'
+			fld = 'lid' if side==LEFT else 'rid'
+			if dpth == 2:
+				if side==LEFT: raise Exception('What does it mean to look up an L chain?')
 
-			elif dpth == 2:
 				lm = m
 				m += 1
-
 				wheres.append(f"m{lm}.qnt!=0")
-
-				joins.append(f"JOIN {table} m{m} ON {selects[-3][:6]}=m{m}.aid")
+				joins.append(f"JOIN {table} m{m} ON m{lm}.bid=m{m}.aid")
 				selects.append(f"m{m}.aid AS a{m}")
 				selects.append(f"m{m}.lid AS l{m}")
 				selects.append(f"m{m}.rid AS r{m}")
@@ -845,15 +844,12 @@ def selectify(statement, table=None, aidOnly=False):
 				selects.append(f"m{m}.qnt AS q{m}")
 
 			if operand is not None:
-				fld = 'lid' if side==LEFT else 'rid'
 				wheres.append(f'm{m}.{fld}=%s')
 				params.append(operand)
 
 		else:
 			raise Exception('Error: unknown operator')
 
-	# last qnt condition
-	wheres.append(f"m{m}.qnt{opr}{val}")
 
 	if aidOnly: selects = ['m0.aid AS a0']
 
@@ -1115,7 +1111,7 @@ def logify (operators: list, operands: list):
 				if not ais[suboperands[0]].get(suboperands[1]): ais[suboperands[0]][suboperands[1]]=[]
 				ais[suboperands[0]][suboperands[1]].append([subopertors[3:], suboperands[2:]])
 
-	# Apply A[L]R]B rules to C for A[L[C => C]R]B
+	# Apply A[L]R]B rules to C for A[L]C => C[R]B
 	for cmd in cmds:
 		for subopertors, suboperands in cmd:
 			if subopertors[0:4] == ALRB and suboperands[1]==I['is'] and ais.get(suboperands[3]) and ais[suboperands[3]].get(suboperands[2]):
