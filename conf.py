@@ -4,8 +4,8 @@ DB_HOST = 'localhost'  # Host for MySQL/Poseqres
 DB_USER = 'memeuser'  # Username for MySQL/Poseqres
 DB_PASSWORD = 'memepswd'  # Password for MySQL/Poseqres
 DB_NAME = 'memedb'  # Database name for MySQL/Poseqres
-DB_ALRBEQ='alrbeq'
-DB_ABS='abs'
+DB_TABLE_MEME='meme'
+DB_TABLE_NAME='name'
 
 # Global dictionary to cache key->id mappings
 I = {

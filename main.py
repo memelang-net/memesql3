@@ -18,7 +18,7 @@ def sql(qry_sql):
 
 # Search for memes from a memelang query string
 def qry(mqry):
-	sql, params = memelang.querify(mqry, DB_ALRBEQ, False)
+	sql, params = memelang.querify(mqry, DB_TABLE_MEME, False)
 	params = memelang.identify(params)
 	full_sql = memelang.morfigy(sql, params)
 
@@ -54,10 +54,10 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_ALRBEQ} (aid BIGINT, lid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_ALRBEQ}_airb_idx ON {DB_ALRBEQ} (aid,lid,rid,bid); CREATE INDEX {DB_ALRBEQ}_rid_idx ON {DB_ALRBEQ} (rid); CREATE INDEX {DB_ALRBEQ}_bid_idx ON {DB_ALRBEQ} (bid);\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_ABS} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE INDEX {DB_ABS}_aid_idx ON {DB_ABS} (aid); CREATE INDEX {DB_ABS}_bid_idx ON {DB_ABS} (bid); CREATE INDEX {DB_ABS}_str_idx ON {DB_ABS} (str);\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_ALRBEQ} TO {DB_USER};\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_ABS} TO {DB_USER};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid BIGINT, lid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_airb_idx ON {DB_TABLE_MEME} (aid,lid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
 	]
 
 	for command in commands:
@@ -68,8 +68,8 @@ def tableadd():
 # Delete database table
 def tabledel():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_ALRBEQ};\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_ABS};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_MEME};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_NAME};\"",
 	]
 
 	for command in commands:
@@ -119,14 +119,14 @@ if __name__ == "__main__":
 	elif sys.argv[1] == 'tableadd' or sys.argv[1] == 'addtable': tableadd()
 	elif sys.argv[1] == 'tabledel' or sys.argv[1] == 'deltable': tabledel()
 	elif sys.argv[1] == 'coreadd' or sys.argv[1] == 'addcore': putfile(LOCAL_DIR+'/core.meme')
-	elif sys.argv[1] == 'fileall' or sys.argv[1] == 'allfile':
-		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
-		for file in files:
-			putfile(file)
 	elif sys.argv[1] == 'recore':
 		tabledel()
 		tableadd()
 		putfile(LOCAL_DIR+'/core.meme')
+	elif sys.argv[1] == 'fileall' or sys.argv[1] == 'allfile':
+		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
+		for file in files:
+			putfile(file)
 	elif sys.argv[1] == 'logitest':
 		logitest()
 	else:

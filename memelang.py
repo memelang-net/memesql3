@@ -33,54 +33,54 @@ OPR = {
 		'func' : VAL,
 		'form' : INT,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['L"']: {
 		'side' : LEFT,
 		'func' : VAL,
 		'form' : STR,
 		'dpth' : 0,
-		'pre' : '"',
-		'str' : '',
-		'post' : '"',
+		'$beg' : '"',
+		'$mid' : '',
+		'$end' : '"',
 	},
 	I['L.']: {
 		'side' : LEFT,
 		'func' : VAL,
 		'form' : DEC,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['R1']: {
 		'side' : RIGHT,
 		'func' : VAL,
 		'form' : INT,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['R"']: {
 		'side' : RIGHT,
 		'func' : VAL,
 		'form' : STR,
 		'dpth' : 0,
-		'pre' : '"',
-		'str' : '',
-		'post' : '"',
+		'$beg' : '"',
+		'$mid' : '',
+		'$end' : '"',
 	},
 	I['R.']: {
 		'side' : RIGHT,
 		'func' : VAL,
 		'form' : DEC,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '',
+		'$end' : '',
 	},
 
 	I['L=']: {
@@ -88,106 +88,106 @@ OPR = {
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '=',
-		'post' : '',
+		'$beg' : '=',
+		'$end' : '',
 	},
 	I['L>']: {
 		'side' : LEFT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '>',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '>',
+		'$end' : '',
 	},
 	I['L<']: {
 		'side' : LEFT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '<',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '<',
+		'$end' : '',
 	},
 	I['L>=']: {
 		'side' : LEFT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '>=',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '>=',
+		'$end' : '',
 	},
 	I['L<=']: {
 		'side' : LEFT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '<=',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '<=',
+		'$end' : '',
 	},
 	I['L!=']: {
 		'side' : LEFT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '!=',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '!=',
+		'$end' : '',
 	},
 	I['R=']: {
 		'side' : RIGHT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '=',
-		'post' : '',
+		'$beg' : '=',
+		'$end' : '',
 	},
 	I['R>']: {
 		'side' : RIGHT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '>',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '>',
+		'$end' : '',
 	},
 	I['R<']: {
 		'side' : RIGHT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '<',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '<',
+		'$end' : '',
 	},
 	I['R>=']: {
 		'side' : RIGHT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '>=',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '>=',
+		'$end' : '',
 	},
 	I['R<=']: {
 		'side' : RIGHT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '<=',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '<=',
+		'$end' : '',
 	},
 	I['R!=']: {
 		'side' : RIGHT,
 		'func' : EQL,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '!=',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '!=',
+		'$end' : '',
 	},
 
 	I['A']: {
@@ -195,54 +195,54 @@ OPR = {
 		'func' : AB,
 		'form' : AID,
 		'dpth' : 0,
-		'pre' : '[',
-		'str' : '',
-		'post' : '',
+		'$beg' : '[',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['LL']: {
 		'side' : LEFT,
 		'func' : REL,
 		'form' : AID,
 		'dpth' : 2,
-		'pre' : '[',
-		'str' : '',
-		'post' : '',
+		'$beg' : '[',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['L']: {
 		'side' : LEFT,
 		'func' : REL,
 		'form' : AID,
 		'dpth' : 1,
-		'pre' : '[',
-		'str' : '',
-		'post' : '',
+		'$beg' : '[',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['B']: {
 		'side' : RIGHT,
 		'func' : AB,
 		'form' : AID,
 		'dpth' : 0,
-		'pre' : ']',
-		'str' : '',
-		'post' : '',
+		'$beg' : ']',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['RR']: {
 		'side' : RIGHT,
 		'func' : REL,
 		'form' : AID,
 		'dpth' : 2,
-		'pre' : ']',
-		'str' : '',
-		'post' : '',
+		'$beg' : ']',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['R']: {
 		'side' : RIGHT,
 		'func' : REL,
 		'form' : AID,
 		'dpth' : 1,
-		'pre' : ']',
-		'str' : '',
-		'post' : '',
+		'$beg' : ']',
+		'$mid' : '',
+		'$end' : '',
 	},
 
 	I['Or']: {
@@ -250,27 +250,27 @@ OPR = {
 		'func' : OR,
 		'form' : INT,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '',
+		'$end' : '',
 	},
 	I['And']: {
 		'side' : CLOSE,
 		'func' : AND,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : ' ',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : ' ',
+		'$end' : '',
 	},
 	I['End']: {
 		'side' : CLOSE,
 		'func' : END,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : ';',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : ';',
+		'$end' : '',
 	},
 	# Actually starts operators, treat as close of non-existant prior statement
 	I['opr']: {
@@ -278,9 +278,9 @@ OPR = {
 		'func' : END,
 		'form' : NON,
 		'dpth' : 0,
-		'pre' : '',
-		'str' : '',
-		'post' : '',
+		'$beg' : '',
+		'$mid' : '',
+		'$end' : '',
 	},
 }
 
@@ -327,6 +327,39 @@ OPSIDE = {
 		' ' : I['And'],
 		';' : I['End'],
 	}
+}
+
+# When delacing, replace [O1, O2] with [O3, O4]
+OPRSEQ = {
+	# We assumed the first item wan an A, but its actually a Decimal
+	(I['A'], I['L=']): (I['L.'], I['L=']),
+	(I['A'], I['L>']): (I['L.'], I['L>']),
+	(I['A'], I['L<']): (I['L.'], I['L<']),
+	(I['A'], I['L>=']): (I['L.'], I['L>=']),
+	(I['A'], I['L<=']): (I['L.'], I['L<=']),
+	(I['A'], I['L!=']): (I['L.'], I['L!=']),
+
+	# Chained relations
+	(I['L'], I['L']): (I['LL'], I['L']),
+	(I['R'], I['R']): (I['R'], I['RR']),
+
+	# Last ]R is actually ]B
+	(I['R'], I['R=']): (I['B'], I['R=']),
+	(I['R'], I['R>']): (I['B'], I['R>']),
+	(I['R'], I['R<']): (I['B'], I['R<']),
+	(I['R'], I['R>=']): (I['B'], I['R>=']),
+	(I['R'], I['R<=']): (I['B'], I['R<=']),
+	(I['R'], I['R!=']): (I['B'], I['R!=']),
+	(I['R'], I['And']): (I['B'], I['And']),
+	(I['R'], I['End']): (I['B'], I['End']),
+	(I['RR'], I['R=']): (I['B'], I['R=']),
+	(I['RR'], I['R>']): (I['B'], I['R>']),
+	(I['RR'], I['R<']): (I['B'], I['R<']),
+	(I['RR'], I['R>=']): (I['B'], I['R>=']),
+	(I['RR'], I['R<=']): (I['B'], I['R<=']),
+	(I['RR'], I['R!=']): (I['B'], I['R!=']),
+	(I['RR'], I['And']): (I['B'], I['And']),
+	(I['RR'], I['End']): (I['B'], I['End']),
 }
 
 
@@ -386,10 +419,10 @@ def delace(mqry: str):
 
 		# Operators
 		elif c in OPR_CHR:
-			opstr = c
-			j = 1
 
 			# Collect up to 3 more valid operator characters
+			opstr = c
+			j = 1
 			while j < 2 and (i + j) < mqry_len:
 				cc = mqry_chars[i + j]
 				if not OPR_CHR.get(cc) or OPR_CHR[cc] < 2: break
@@ -401,41 +434,22 @@ def delace(mqry: str):
 
 			operator = OPSIDE[side][opstr]
 			
-			# SWITCH SIDES
-			if OPR[operator]['side']!=side:
-				if side==CLOSE or OPR[operator]['side']>side: side=OPR[operator]['side']
-				else: raise Exception(f"Memelang parse error: Side order for {opstr} at char {i} in {mqry}")
+			if OPRSEQ.get((operators[-1], operator)):
+				operators[-1], operator = OPRSEQ[(operators[-1], operator)]
 
-			# LEFT SIDE: V = A[RR[RR[R
-			elif side==LEFT: 
+			elif OPR[operator]['side']!=side:
+				if side!=CLOSE and OPR[operator]['side']<side:
+					raise Exception(f"Memelang parse error: Side order for {opstr} at char {i} in {mqry}")
 
-				# Begining of statement
-				if OPR[operators[-1]]['side']!=LEFT: pass
-
-				# Change starting A to L. when followed by L=
-				elif OPR[operator]['func'] == EQL and OPR[operators[-1]]['func'] == AB: operators[-1]=I['L.']
-
-				# Previous L is an LL
-				elif operator == I['L'] and operators[-1]==I['L']: operators[-1]=I['LL']
-
-				# Sequence error
-				elif OPR[operator]['func']>OPR[operators[-1]]['func']:
+			elif side==LEFT:
+				if OPR[operator]['func']>OPR[operators[-1]]['func']:
 					raise Exception(f"Memelang parse error: Left operator order for {opstr} after {K[operators[-1]]} at char {i} in {mqry}")
 
-			# RIGHT SIDE: ]RR]RR]B = V
 			elif side==RIGHT:
-
-				# Sequence error
 				if OPR[operator]['func']<OPR[operators[-1]]['func']:
 					raise Exception(f"Memelang parse error: Right operator order for {opstr} after {K[operators[-1]]} at char {i} in {mqry}")
 
-				# Current R is RR
-				elif operator == I['R'] and OPR[operators[-1]]['func']==REL: operator=I['RR']
-
-			# Ending ]R becomes B
-			# Could happen at R= or & or ;
-			if OPR[operator]['func'] >= AB and OPR[operators[-1]]['side']==RIGHT and OPR[operators[-1]]['func']==REL: operators[-1]=I['B']
-
+			side=OPR[operator]['side']
 			operators.append(operator)
 			operands.append(None)
 
@@ -482,17 +496,17 @@ def delace(mqry: str):
 				operators.append(I['1'])
 				operands.append(1)
 
-			# L/R fill operand
+			# L/LL/R/RR fill operand
 			elif OPR[operators[-1]]['func']==REL: operands[-1]=operand
 
-			# Start of statement, assume A
+			# Start of statement, assume A, might switch to Decimal later
 			elif side==CLOSE:
 				side=LEFT
 				operators.append(OPSIDE[side]['a'])
 				operands.append(operand)
 
 			# Decimal
-			elif (isinstance(operand, str) and '.' in operand) or (isinstance(operand, int) and OPR[operators[-1]]['func']==EQL):
+			elif (isinstance(operand, str) and '.' in operand) or isinstance(operand, int):
 				operators.append(OPSIDE[side]['.'])
 				operands.append(float(operand))
 
@@ -522,14 +536,14 @@ def interlace(operators: list, operands: list, interlace_set={}):
 					else: operand = '-0.' + operand[1:]
 
 		elif OPR[operator]['form'] == NON:
-			operand = OPR[operator]['str']
+			operand = OPR[operator]['$mid']
 			if operator == I['End'] and interlace_set.get('newline'): operand+="\n"
 
 		# Append the interlaced expression
 		if interlace_set.get('html'):
-			mqry += '<var class="v' + str(operator) + '">' + html.escape(OPR[operator]['pre'] + operand + OPR[operator]['post']) + '</var>'
+			mqry += '<var class="v' + str(operator) + '">' + html.escape(OPR[operator]['$beg'] + operand + OPR[operator]['$end']) + '</var>'
 		else:
-			mqry += OPR[operator]['pre'] + operand + OPR[operator]['post']
+			mqry += OPR[operator]['$beg'] + operand + OPR[operator]['$end']
 
 	if interlace_set.get('html'):
 		mqry = '<code class="meme">' + mqry + '</code>'
@@ -581,8 +595,7 @@ def normalize (operators: list, operands: list):
 
 # Input: operators, operands
 # Output [[[operator, operator], [operand, operand]]]
-def cmdify(operators: list, operands: list, cmdify_set={}, table=DB_ALRBEQ):
-
+def cmdify(operators: list, operands: list, cmdify_set={}):
 	if not operators: return []
 
 	if operators[-1]!=I['End']:
@@ -615,14 +628,14 @@ def cmdify(operators: list, operands: list, cmdify_set={}, table=DB_ALRBEQ):
 
 # Input: Memelang query string
 # Output: SQL query string
-def querify(mqry: str, alrbeq_table=None, abs_table=None):
-	if not alrbeq_table: alrbeq_table=DB_ALRBEQ
-	if not abs_table: abs_table=DB_ABS
+def querify(mqry: str, meme_table=None, name_table=None):
+	if not meme_table: meme_table=DB_TABLE_MEME
+	if not name_table: name_table=DB_TABLE_NAME
 
 	operators, operands = delace(mqry)
 
-	if abs_table: 
-		operands = identify(operands, abs_table)
+	if name_table: 
+		operands = identify(operands, name_table)
 		missings = [x for x in operands if isinstance(x, str)]
 		if missings:
 			raise Exception("Unknown keys: " + ", ".join(missings))
@@ -633,7 +646,7 @@ def querify(mqry: str, alrbeq_table=None, abs_table=None):
 	params = []
 
 	for cmd in cmds:
-		sql, param = subquerify(cmd, alrbeq_table)
+		sql, param = subquerify(cmd, meme_table)
 		queries.append(sql)
 		params.extend(param)
 
@@ -642,7 +655,7 @@ def querify(mqry: str, alrbeq_table=None, abs_table=None):
 
 # Input: One mcmd memelang cmd array
 # Output: One SQL query string
-def subquerify(cmd: list, table=DB_ALRBEQ):
+def subquerify(cmd: list, table=DB_TABLE_MEME):
 	qry_set = {'all': False, 'of': False}
 	true_groups = {}
 	false_group = []
@@ -787,7 +800,7 @@ def subquerify(cmd: list, table=DB_ALRBEQ):
 # Input: One Memelang statement array
 # Output: SELECT string, FROM string, WHERE string, and depth int
 def selectify(statement, table=None, aidOnly=False):
-	if not table: table=DB_ALRBEQ
+	if not table: table=DB_TABLE_MEME
 
 	params = []
 	wheres = []
@@ -801,8 +814,6 @@ def selectify(statement, table=None, aidOnly=False):
 		operand = statement[1][i]
 		side = OPR[operator]['side']
 		func = OPR[operator]['func']
-		dpth = OPR[operator]['dpth']
-		string = OPR[operator]['str']
 		form = OPR[operator]['form']
 
 		# A/B
@@ -813,7 +824,7 @@ def selectify(statement, table=None, aidOnly=False):
 
 		# equality operators # > <
 		elif func == EQL: 
-			opr = string
+			opr = OPR[operator]['$mid']
 			#if side==LEFT: wheres.append(f"m{m}.qnt{opr}{val}")
 
 		# value
@@ -829,7 +840,7 @@ def selectify(statement, table=None, aidOnly=False):
 		# REL
 		elif func == REL:
 			fld = 'lid' if side==LEFT else 'rid'
-			if dpth == 2:
+			if OPR[operator]['dpth'] == 2:
 				if side==LEFT: raise Exception('What does it mean to look up an L chain?')
 
 				lm = m
@@ -868,14 +879,15 @@ def selectify(statement, table=None, aidOnly=False):
 # Load key->aids in I and K caches
 # I['john_adams']=123
 # K[123]='john_adams'
-def aidcache(keys, table=DB_ABS):
+def aidcache(keys, name_table=None):
+	if not name_table: name_table=DB_TABLE_NAME
 	if not keys: return
 
 	uncached_keys = [key for key in keys if key not in I]
 
 	if not uncached_keys: return
 
-	rows=db.namegets([], [KEY], uncached_keys, table)
+	rows=db.namegets([], [KEY], uncached_keys, name_table)
 
 	for row in rows:
 		I[row[2]] = int(row[0])
@@ -885,12 +897,13 @@ def aidcache(keys, table=DB_ABS):
 # Input value is a list of strings ['a', 'b', 'c', 'd']
 # Load key->aid
 # Return the data with any keys with ids
-def identify(keys: list, table=DB_ABS):
+def identify(keys: list, name_table=None):
+	if not name_table: name_table=DB_TABLE_NAME
 	ids = []
 
 	if not keys: return ids
 
-	aidcache([key for key in keys if isinstance(key, str)]) #  and not key.isdigit()
+	aidcache([key for key in keys if isinstance(key, str)], name_table) #  and not key.isdigit()
 
 	for key in keys:
 		if not isinstance(key, str): ids.append(key)
@@ -901,15 +914,17 @@ def identify(keys: list, table=DB_ABS):
 	return ids
 
 
-def identify1(val, table=DB_ABS):
-	ids = identify([val], table)
+def identify1(val, name_table=None):
+	if not name_table: name_table=DB_TABLE_NAME
+	ids = identify([val], name_table)
 	return ids[0] if isinstance(ids[0], int) else False
 
 
 # Input value is a list of ints [123,456,789]
 # Load aid->key
 # Return the data with any aids replaced with keys
-def namify(operands: list, bids: list, table=DB_ABS):
+def namify(operands: list, bids: list, name_table=None):
+	if not name_table: name_table=DB_TABLE_NAME
 	missings=[]
 
 	output = {}
@@ -922,7 +937,7 @@ def namify(operands: list, bids: list, table=DB_ABS):
 			operands[i] = int(operands[i])
 			matches.append(operands[i])
 
-	names = db.namegets(matches, bids)
+	names = db.namegets(matches, bids, [], name_table)
 
 	namemap = {}
 	for name in names:
@@ -945,34 +960,37 @@ def namify(operands: list, bids: list, table=DB_ABS):
 # Replace keys with aids
 # Execute in DB
 # Return results (optionally replacing aids with keys with statement "qry.nam:key=1")
-def get(mqry, alrbeq_table=DB_ALRBEQ, abs_table=DB_ABS):
+def get(mqry, meme_table=None, name_table=None):
+	if not meme_table: meme_table=DB_TABLE_MEME
+	if not name_table: name_table=DB_TABLE_NAME
 	output=[[I['opr']], [I['id']]]
 	mqry, namekeys = dename(mqry)
-	sql, params = querify(mqry, alrbeq_table)	
+	sql, params = querify(mqry, meme_table)	
 	memes = db.select(sql, params)
 
 	for meme in memes:
-		e=int(meme[4])
 		v=float(meme[5])
-		if v in (0,1): e=I['R1']
-		output[0].extend(ALRB + [int(meme[4]), e, I['End']])
-		output[1].extend([int(meme[0]), int(meme[1]), int(meme[2]), int(meme[3]), e, v, None])
+		eo=int(meme[4])
+		vo = I['R1'] if v in (0,1) and eo==I['R='] else I['R.']
+		#if v in (0,1): e=I['R1']
+		output[0].extend(ALRB + [eo, vo, I['End']])
+		output[1].extend([int(meme[0]), int(meme[1]), int(meme[2]), int(meme[3]), None, v, None])
 
-	if namekeys: output.extend(namify(output[1], namekeys, abs_table))
+	if namekeys: output.extend(namify(output[1], namekeys, name_table))
 
 	return output
 
 
 # Return meme count of above results
-def count(mqry, alrbeq_table=DB_ALRBEQ, abs_table=DB_ABS):
-	sql, params = querify(mqry, alrbeq_table)
+def count(mqry, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
+	sql, params = querify(mqry, meme_table)
 	return len(db.select(sql, params))
 
 
-def put (operators: list, operands: list, alrbeq_table=None, abs_table=None):
+def put (operators: list, operands: list, meme_table=None, name_table=None):
 	if not operators: return operators, operands
-	if not alrbeq_table: alrbeq_table=DB_ALRBEQ
-	if not abs_table: abs_table=DB_ABS
+	if not meme_table: meme_table=DB_TABLE_MEME
+	if not name_table: name_table=DB_TABLE_NAME
 
 	# Load IDs
 	aidcache(operands)
@@ -983,8 +1001,8 @@ def put (operators: list, operands: list, alrbeq_table=None, abs_table=None):
 	missings = {}
 	name_sqls = []
 	name_params = []
-	sqls = {alrbeq_table:[], abs_table:[]}
-	params = {alrbeq_table:[], abs_table:[]}
+	sqls = {meme_table:[], name_table:[]}
+	params = {meme_table:[], name_table:[]}
 
 	# Convert operands to IDs where possible
 	for o, operator in enumerate(operators):
@@ -1004,18 +1022,18 @@ def put (operators: list, operands: list, alrbeq_table=None, abs_table=None):
 				missings.pop(suboperands[5], None)
 				aid = int(suboperands[0])
 				key = suboperands[5]
-				sqls[abs_table].append("(%s,%s,%s)")
-				params[abs_table].extend([aid, KEY, key])
+				sqls[name_table].append("(%s,%s,%s)")
+				params[name_table].extend([aid, KEY, key])
 				I[key]=aid
 				K[aid]=key
 
 	# Missing keys with no associated ID
 	if missings:
-		aid = db.maxnum('aid', abs_table) or I['cor']
+		aid = db.maxnum('aid', name_table) or I['cor']
 		for key, val in missings.items():
 			aid += 1
-			sqls[abs_table].append("(%s,%s,%s)")
-			params[abs_table].extend([aid, KEY, key])
+			sqls[name_table].append("(%s,%s,%s)")
+			params[name_table].extend([aid, KEY, key])
 			I[key]=aid
 			K[aid]=key
 
@@ -1035,14 +1053,14 @@ def put (operators: list, operands: list, alrbeq_table=None, abs_table=None):
 			# A[L|R]B=String
 			if subopertors[5]==I['R"']:
 				if suboperands[3]==KEY: continue # Keys are already done
-				params[abs_table].extend([suboperands[0], suboperands[3], suboperands[5]])
-				sqls[abs_table].append('(%s,%s,%s)')
+				params[name_table].extend([suboperands[0], suboperands[3], suboperands[5]])
+				sqls[name_table].append('(%s,%s,%s)')
 
 			# A[L|R]B=Decimal/True
 			else:
 				suboperands[4] = subopertors[4]
-				params[alrbeq_table].extend(suboperands)
-				sqls[alrbeq_table].append('(%s,%s,%s,%s,%s,%s)')
+				params[meme_table].extend(suboperands)
+				sqls[meme_table].append('(%s,%s,%s,%s,%s,%s)')
 
 	for tbl in params:
 		if params[tbl]:
