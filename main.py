@@ -3,7 +3,6 @@ from memelang import *
 import sys
 import os
 import re
-import db
 import glob
 import memelang
 
@@ -11,7 +10,7 @@ LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # Execute and output an SQL query
 def sql(qry_sql):
-	rows = db.select(qry_sql, [])
+	rows = memelang.select(qry_sql, [])
 	for row in rows:
 		print(row)
 

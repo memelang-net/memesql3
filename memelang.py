@@ -1,6 +1,7 @@
 import re
 import html
 import db
+import psycopg2
 from conf import *
 
 #### SETUP ####
@@ -966,6 +967,57 @@ def selectify(statement, table=None, aidOnly=False):
 	]
 
 
+#### POSTGRES QUERIES #####
+
+def select(query: str, params: list = []):
+	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
+	with psycopg2.connect(conn_str) as conn:
+		cursor = conn.cursor()
+		cursor.execute(query, params)
+		rows=cursor.fetchall()
+		return [list(row) for row in rows]
+
+
+def insert(query: str, params: list = []):
+	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
+	with psycopg2.connect(conn_str) as conn:
+		cursor = conn.cursor()
+		cursor.execute(query, params)
+
+
+def selnum(query: str):
+	result = select(query)
+	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
+
+
+def maxnum(col: str = 'aid', table: str = None):
+	if not table: table=DB_TABLE_MEME
+	result = select(f"SELECT MAX({col}) FROM {table}")
+	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
+
+
+# Input list of aids and list of bids
+# Output names from DB
+def selectnames(aids: list = [], bids: list = [], strings: list = [], table: str = None):
+	if not table: table=DB_TABLE_NAME
+
+	conds = []
+	params = []
+	if bids: 
+		conds.append(f"bid IN ("+ ','.join(['%s'] * len(bids)) +")")
+		params.extend(map(int, bids))
+	if aids: 
+		conds.append(f"aid IN ("+ ','.join(['%s'] * len(aids)) +")")
+		params.extend(map(int, aids))
+	if strings: 
+		conds.append(f"str IN ("+ ','.join(['%s'] * len(strings)) +")")
+		params.extend(map(str, strings))
+
+	if not conds: raise Exception('No conds')
+
+	return select(f"SELECT DISTINCT aid, bid, str FROM {table} WHERE " + ' AND '.join(conds), params)
+
+
 #### KEY-ID CONVERSION ####
 
 # Input list of key strings ['george_washington', 'john_adams']
@@ -980,7 +1032,7 @@ def aidcache(keys, name_table=None):
 
 	if not uncached_keys: return
 
-	rows=db.namegets([], [KEY], uncached_keys, name_table)
+	rows=selectnames([], [KEY], uncached_keys, name_table)
 
 	for row in rows:
 		I[row[2]] = int(row[0])
@@ -1035,7 +1087,7 @@ def namify(operands: list, bids: list, name_table=None):
 	for i,operand in enumerate(operands):
 		if isinstance(operand, int): matches.append(abs(operands[i]))
 
-	names = db.namegets(matches, bids, [], name_table)
+	names = selectnames(matches, bids, [], name_table)
 
 	namemap = {}
 	for name in names:
@@ -1067,7 +1119,7 @@ def get(mqry, meme_table=None, name_table=None):
 	output=[[I['opr']], [I['id']]]
 	mqry, namekeys = dename(mqry)
 	sql, params = querify(mqry, meme_table)	
-	memes = db.select(sql, params)
+	memes = select(sql, params)
 
 	for meme in memes:
 		output[0].extend([int(meme[1])] + ACRB + [int(meme[6]), I['End']])
@@ -1081,7 +1133,7 @@ def get(mqry, meme_table=None, name_table=None):
 # Return meme count of above results
 def count(mqry, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
 	sql, params = querify(mqry, meme_table)
-	return len(db.select(sql, params))
+	return len(select(sql, params))
 
 
 def put (operators: list, operands: list, meme_table=None, name_table=None):
@@ -1126,7 +1178,7 @@ def put (operators: list, operands: list, meme_table=None, name_table=None):
 
 	# Missing keys with no associated ID
 	if missings:
-		aid = db.maxnum('aid', name_table) or I['cor']
+		aid = maxnum('aid', name_table) or I['cor']
 		for key, val in missings.items():
 			aid += 1
 			sqls[name_table].append("(%s,%s,%s)")
@@ -1162,7 +1214,7 @@ def put (operators: list, operands: list, meme_table=None, name_table=None):
 
 	for tbl in params:
 		if params[tbl]:
-			db.insert(f"INSERT INTO {tbl} VALUES " + ','.join(sqls[tbl]) + " ON CONFLICT DO NOTHING", params[tbl])
+			insert(f"INSERT INTO {tbl} VALUES " + ','.join(sqls[tbl]) + " ON CONFLICT DO NOTHING", params[tbl])
 
 	return operators, operands
 
