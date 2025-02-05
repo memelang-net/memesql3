@@ -54,7 +54,7 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid BIGINT, lid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_airb_idx ON {DB_TABLE_MEME} (aid,lid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), oid SMALLINT, aid BIGINT, cid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
@@ -80,7 +80,7 @@ def tabledel():
 def logitest():
 	operators, operands = memelang.delace('a]rz:bz=1;a]rx:bx=1;rx[bx]ry:by=t;rz[bz]rj')
 	print(operators, operands)
-	memelang.normalize(operators, operands)
+	memelang.expand(operators, operands)
 	print(operators, operands)
 	memelang.logify(operators, operands)
 	print(memelang.interlace(operators, operands,{'newline':True}))
@@ -98,10 +98,10 @@ def memeprint(operators, operands):
 
 	for cmd in cmds:
 		for suboperators, suboperands in cmd:
-			if suboperators[:4]==ALRB and suboperands[1] in (I['is'], 'is', I['of'], 'of'):
+			if suboperators[:5]==TACRB and suboperands[2] in (I['is'], 'is', I['of'], 'of'):
 				found = True
 				meme=list(map(str, suboperands))
-				print(f"| {meme[0][:17]:<17} | {meme[2][:17]:<17} | {meme[3][:17]:<17} | {meme[5].rstrip('0').rstrip('.')[:16]:>16} |")
+				print(f"| {meme[1][:17]:<17} | {meme[3][:17]:<17} | {meme[4][:17]:<17} | {meme[5].rstrip('0').rstrip('.')[:16]:>16} |")
 
 
 	if not found: print(f"| {'No matching memes':<76} |")
