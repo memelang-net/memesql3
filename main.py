@@ -53,7 +53,7 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), oid SMALLINT, aid BIGINT, cid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), oid SMALLINT, aid BIGINT, cid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, wal DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
@@ -90,8 +90,8 @@ def memeprint(operators, operands):
 	found = False
 	length = len(operators)
 
-	br = f"+{'-' * 19}+{'-' * 19}+{'-' * 19}+{'-' * 18}+"
-	print(f"{br}\n| {'A':<17} | {'R':<17} | {'B':<17} | {'Q':>16} |\n{br}")
+	br = f"+{'-' * 25}+{'-' * 25}+{'-' * 25}+"
+	print(f"{br}\n| {'A':<23} | {'D':<23} | {'B=V':<23} |\n{br}")
 
 	cmds = memelang.cmdify(operators, operands)
 
@@ -100,7 +100,13 @@ def memeprint(operators, operands):
 			if suboperators[:5]==TACRB and suboperands[2] in (I['is'], 'is', I['of'], 'of'):
 				found = True
 				meme=list(map(str, suboperands))
-				print(f"| {meme[1][:17]:<17} | {meme[3][:17]:<17} | {meme[4][:17]:<17} | {meme[5].rstrip('0').rstrip('.')[:16]:>16} |")
+
+				if suboperators[5]==I['D=I']: bq=meme[4]
+				elif suboperators[5]==I['D=S']: bq='"'+meme[5]+'"'
+				elif suboperators[5]==I['D=D']: bq=meme[5].rstrip('0').rstrip('.')+' '+meme[4]
+				else: bq=OPR[suboperators[5]]['$beg']+' '+meme[5].rstrip('0').rstrip('.')+' '+meme[4]
+
+				print(f"| {meme[1][:23]:<23} | {meme[3][:23]:<23} | {bq[:23]:<23} |")
 
 
 	if not found: print(f"| {'No matching memes':<76} |")
