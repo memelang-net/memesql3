@@ -1,6 +1,6 @@
 # memesql3
 
-These Python scripts receive [Memelang](https://memelang.net/) queries, convert them to SQL, then execute them on a Postgres database. Contact info@memelang.net. Copyright HOLTWORK LLC. Patent pending.
+These Python scripts receive [Memelang v3](https://memelang.net/03/) queries, convert them to SQL, then execute them on a Postgres database. Contact info@memelang.net. Copyright HOLTWORK LLC. Patent pending.
 
 
 ## Files
@@ -47,7 +47,7 @@ Execute a query:
 
 Outputs:
 
-	SQL: SELECT * FROM meme m0 WHERE m0.aid='john_adams' AND m0.rid='spouse' AND m0.wal!=0
+	SQL: SELECT * FROM meme m0 WHERE m0.aid='john_adams' AND m0.did='spouse' AND m0.wal!=0
 	
 	+---------------------+---------------------+---------------------+------------+
 	| A                   | R                   | B                   |          Q |

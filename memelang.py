@@ -1,21 +1,31 @@
 import re
 import html
-import db
 import psycopg2
 from conf import *
 
 #### SETUP ####
 # These are settings for handling Memelang queries. Storing 
-# these in variables makes them overly explicit, but reduce 
+# these in variables makes them overly explicit, but reduces
 # encoding if/else logic in the later functions.
 
-ACRB    = [I['A'], I['C'], I['D'], I['B']]
-TACRB   = [I['C=I']] + ACRB
-TACRBS  = TACRB + [I['D=S']]
+# Column order
+V = 0
+A = 1
+C = 2
+D = 3
+B = 4
+W = 5
+VO = 6
+WO = 7
+
+ACDB    = [I['A'], I['C'], I['D'], I['B']]
+VACDB   = [I['C=I']] + ACDB
+VACDBS  = VACDB + [I['D=S']]
 
 NAM    = I['nam']
 KEY    = I['key']
 TRUE   = 1
+FALSE  = 0
 
 # Sides
 COND   = -1		# Left side conditions
@@ -27,8 +37,8 @@ META   =  3		# Meta (And, END)
 
 # Statement Funcs
 REL    =  4		# Condition or Declaration
-AB     =  5		# A or B item
-VAL    =  6		# Value like a decimal number
+NOD    =  5		# A or B node
+VAL    =  6		# Value (e.g. decimal number)
 OR     =  7		# OR operator
 
 # Meta funcs
@@ -39,7 +49,7 @@ END    =  9		# END operator (;)
 NON    = 10		# Value has no form, like END
 INT    = 11		# Value is integer, like True, False, Get
 DEC    = 12		# Value is decimal number
-AID    = 13		# Value is an A/R/B identifier integer
+AID    = 13		# Value is an ID integer
 STR    = 14		# Value is a string
 
 # Each operator in a Memelang and its meaning
@@ -47,107 +57,117 @@ OPR = {
 	I['C=?']: { 		# Operator ID
 		'side' : COND,	# Which side is it on? COND or DECL
 		'cont' : STAT,  # What's the context? STAT or META
-		'func' : VAL,	# What function does it do? REL, AB, VAL, OR, AND, or END
+		'func' : VAL,	# What function does it do? REL, NOD, VAL, OR, AND, or END
 		'form' : NON,	# What's it's output form? NON, INT, DEC, AID, or STR
-		'dpth' : 0,		# For relations 1 or 2
-		'defi' : None, 	# Default value ID
-		'$beg' : '=',	# Output string before
+		'dcol' : 'vop', # What's the DB column name?
+		'dpth' : 0,		# For relations: 1 or 2
+		'dfid' : None, 	# Default value ID
+		'$beg' : '',	# Output string before
 		'$mid' : '',	# Connstant output string in middle
-		'$end' : '',	# Output string end
+		'$end' : '=',	# Output string end
 	},
 	I['C=I']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : INT,
+		'dcol' : 'vop',
 		'dpth' : 0,
-		'defi' : TRUE, 	# Default value ID
-		'$beg' : '=',
+		'dfid' : TRUE, 	# Default value ID
+		'$beg' : '',
 		'$mid' : '',
-		'$end' : '',
+		'$end' : '=',
 	},
 	I['C=S']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : STR,
+		'dcol' : False, # Not allowed yet
 		'dpth' : 0,
-		'defi' : None,
-		'$beg' : '="',
+		'dfid' : None,
+		'$beg' : '"',
 		'$mid' : '',
-		'$end' : '"',
+		'$end' : '"=',
 	},
 	I['C=D']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'vop',
 		'dpth' : 0,
-		'defi' : None,
-		'$beg' : '=',
+		'dfid' : None,
+		'$beg' : '',
 		'$mid' : '',
-		'$end' : '',
+		'$end' : '=',
 	},
 	I['C>']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'vop',
 		'dpth' : 0,
-		'$beg' : '>',
+		'$beg' : '',
 		'$mid' : '',
-		'$end' : '',
+		'$end' : '>',
 	},
 	I['C<']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'vop',
 		'dpth' : 0,
-		'defi' : None,
-		'$beg' : '<',
+		'dfid' : None,
+		'$beg' : '',
 		'$mid' : '',
-		'$end' : '',
+		'$end' : '<',
 	},
 	I['C>=']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'vop',
 		'dpth' : 0,
-		'defi' : None,
-		'$beg' : '>=',
+		'dfid' : None,
+		'$beg' : '',
 		'$mid' : '',
-		'$end' : '',
+		'$end' : '>=',
 	},
 	I['C<=']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'vop',
 		'dpth' : 0,
-		'$beg' : '<=',
+		'$beg' : '',
 		'$mid' : '',
-		'$end' : '',
+		'$end' : '<=',
 	},
 	I['C!=']: {
 		'side' : COND,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'vop',
 		'dpth' : 0,
-		'defi' : None,
-		'$beg' : '!=',
+		'dfid' : None,
+		'$beg' : '',
 		'$mid' : '',
-		'$end' : '',
+		'$end' : '!=',
 	},
 	I['D=?']: {
 		'side' : DECL,
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : NON,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '=',
 		'$mid' : '',
 		'$end' : '',
@@ -157,8 +177,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : INT,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : TRUE,
+		'dfid' : TRUE,
 		'$beg' : '=',
 		'$mid' : '',
 		'$end' : '',
@@ -168,8 +189,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : STR,
+		'dcol' : 'str',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '="',
 		'$mid' : '',
 		'$end' : '"',
@@ -179,8 +201,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '=',
 		'$mid' : '',
 		'$end' : '',
@@ -190,8 +213,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '>',
 		'$mid' : '',
 		'$end' : '',
@@ -201,8 +225,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '<',
 		'$mid' : '',
 		'$end' : '',
@@ -212,8 +237,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '>=',
 		'$mid' : '',
 		'$end' : '',
@@ -223,8 +249,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '<=',
 		'$mid' : '',
 		'$end' : '',
@@ -234,8 +261,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : VAL,
 		'form' : DEC,
+		'dcol' : 'wop',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '!=',
 		'$mid' : '',
 		'$end' : '',
@@ -243,10 +271,11 @@ OPR = {
 	I['A']: {
 		'side' : COND,
 		'cont' : STAT,
-		'func' : AB,
+		'func' : NOD,
 		'form' : AID,
+		'dcol' : 'aid',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '',
 		'$mid' : '',
 		'$end' : '',
@@ -256,8 +285,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : REL,
 		'form' : AID,
+		'dcol' : 'cid',
 		'dpth' : 2,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '[',
 		'$mid' : '',
 		'$end' : '',
@@ -267,8 +297,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : REL,
 		'form' : AID,
+		'dcol' : 'cid',
 		'dpth' : 1,
-		'defi' : I['is'],
+		'dfid' : I['is'],
 		'$beg' : '[',
 		'$mid' : '',
 		'$end' : '',
@@ -276,10 +307,11 @@ OPR = {
 	I['B']: {
 		'side' : DECL,
 		'cont' : STAT,
-		'func' : AB,
+		'func' : NOD,
 		'form' : AID,
+		'dcol' : 'bid',
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : ']',
 		'$mid' : '',
 		'$end' : '',
@@ -289,8 +321,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : REL,
 		'form' : AID,
+		'dcol' : 'did',
 		'dpth' : 2,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : ']',
 		'$mid' : '',
 		'$end' : '',
@@ -300,8 +333,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : REL,
 		'form' : AID,
+		'dcol' : 'did',
 		'dpth' : 1,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : ']',
 		'$mid' : '',
 		'$end' : '',
@@ -311,8 +345,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : OR,
 		'form' : INT,
+		'dcol' : None,
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '',
 		'$mid' : '',
 		'$end' : '',
@@ -322,8 +357,9 @@ OPR = {
 		'cont' : STAT,
 		'func' : OR,
 		'form' : INT,
+		'dcol' : None,
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '',
 		'$mid' : '',
 		'$end' : '',
@@ -334,8 +370,9 @@ OPR = {
 		'cont' : META,
 		'func' : AND,
 		'form' : NON,
+		'dcol' : None,
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '',
 		'$mid' : ' ',
 		'$end' : '',
@@ -345,8 +382,9 @@ OPR = {
 		'cont' : META,
 		'func' : AND,
 		'form' : NON,
+		'dcol' : None,
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '',
 		'$mid' : ' ',
 		'$end' : '',
@@ -357,8 +395,9 @@ OPR = {
 		'cont' : META,
 		'func' : END,
 		'form' : NON,
+		'dcol' : None,
 		'dpth' : 0,
-		'defi' : None,
+		'dfid' : None,
 		'$beg' : '',
 		'$mid' : ';',
 		'$end' : '',
@@ -369,8 +408,9 @@ OPR = {
 		'cont' : META,
 		'func' : END,
 		'form' : NON,
+		'dcol' : None,
 		'dpth' : 0,
-		'defi' : I['mix'],
+		'dfid' : I['mix'],
 		'$beg' : '',
 		'$mid' : '',
 		'$end' : '',
@@ -407,13 +447,12 @@ OPSIDE = {
 		'=<' : I['C<='], # backwards
 		'=!' : I['C!='], # backwards
 		'['  : I['C'],
-		'|'  : I['D'],
 		']'  : I['D'],
 		'|'  : I['C|'],
 		' '  : I['C&'],
 		';'  : I['END'],
 	},
-	# Right side relations
+	# Right side declarations
 	DECL: {
 		'=D' : I['D=D'],
 		'=I' : I['D=I'],
@@ -471,7 +510,7 @@ SEQ = {
 		(I['D>='], I['D=I']) : (None, I['D>=']),
 		(I['D<='], I['D=I']) : (None, I['D<=']),
 
-		# Chained relations
+		# Chained declarations
 		(I['C'], I['C'])     : (I['C2'], I['C']),
 		(I['D'], I['D'])     : (I['D'], I['D2']),
 
@@ -497,7 +536,7 @@ SEQ = {
 		(I['D2'], I['END'])  : (I['B'], I['END']),
 	},
 
-	# Expand A]D]B into V=A[C]D]B=Q
+	# Expand A]D]B into V=A[C]D]B=W
 	'expand': {
 		(I['A'], I['D'])  : (I['A'], I['C'], I['D']),
 		(I['A'], I['C'], I['B'])  : (I['A'], I['C'], I['D'], I['B']),
@@ -569,7 +608,7 @@ def delace(mqry: str):
 		# Operators
 		elif c in OPR_CHR:
 
-			# Collect vacid operator characters
+			# Collect valid operator characters
 			opstr = c
 			j = 1
 			while j < 2 and (i + j) < mqry_len:
@@ -590,7 +629,7 @@ def delace(mqry: str):
 
 			side=OPR[operator]['side']
 			operators.append(operator)
-			operands.append(OPR[operator]['defi'])
+			operands.append(OPR[operator]['dfid'])
 
 			i += j
 
@@ -614,7 +653,8 @@ def delace(mqry: str):
 				operand += mqry_chars[i]
 				i += 1
 
-			if operand.isdigit(): operand=int(operand)
+			if not len(operand): raise Exception(f"Memelang parse error: Unexpected '{c}' at char {i} in {mqry}")
+			elif operand.isdigit(): operand=int(operand)
 
 			# = True/false/get
 			if operand in (0,1,'t','f','g'):
@@ -630,7 +670,7 @@ def delace(mqry: str):
 				operators.append(OPSIDE[side]['|'])
 				operands.append(int(tm.group(1)))
 
-			# L/LL/R/RR fill operand
+			# C/C2/D/D2 fill operand
 			elif OPR[operators[-1]]['func']==REL: operands[-1]=operand
 
 			# Start of statement, assume A, might switch to Decimal later
@@ -652,7 +692,9 @@ def delace(mqry: str):
 
 # Input: operators, operands
 # Output: Memelang string operator1operand1operator2operand2
-def interlace(operators: list, operands: list, interlace_set={}) -> str:
+def interlace(operators: list, operands: list, interlace_set=None) -> str:
+
+	if not interlace_set: interlace_set={}
 	mqry = ''
 
 	for i,operator in enumerate(operators):
@@ -694,7 +736,7 @@ def sequence (operators: list, operands: list, mode: str = 'delace'):
 
 	if operators[-1]!=I['END']:
 		operators.append(I['END'])
-		operands.append(OPR[I['END']]['defi'])
+		operands.append(OPR[I['END']]['dfid'])
 
 	olen=len(operators)
 	o=0
@@ -704,10 +746,10 @@ def sequence (operators: list, operands: list, mode: str = 'delace'):
 			if not SEQ[mode].get(tuple(operators[o:o+slen])): continue
 			suboperators=SEQ[mode][tuple(operators[o:o+slen])]
 
-			# Insert operator at o+1, insert operator's defi value as operand
+			# Insert operator at o+1, insert operator's dfid value as operand
 			if len(suboperators)>slen:
 				operators.insert(o+1, suboperators[1])
-				operands.insert(o+1, OPR[suboperators[1]]['defi'])
+				operands.insert(o+1, OPR[suboperators[1]]['dfid'])
 				olen+=1
 
 			for so, suboperator in enumerate(suboperators):
@@ -722,38 +764,6 @@ def sequence (operators: list, operands: list, mode: str = 'delace'):
 					o-=1
 		o+=1
 
-
-# Input: operators, operands
-# Output [[[operator, operator], [operand, operand]]]
-def cmdify(operators: list, operands: list, cmdify_set={}):
-	if not operators: return []
-
-	if operators[-1]!=I['END']:
-		operators.append(I['END'])
-		operands.append(OPR[I['END']]['defi'])
-
-	cmds = []
-	cmd = []
-	state = [[], []]
-
-	for o,operator in enumerate(operators):
-		if o==0: continue
-		
-		elif OPR[operator]['cont'] == META:
-			if state[0]:
-				cmd.append(state)
-				state = [[], []]
-
-			if OPR[operator]['func'] == END:
-				if cmd:
-					cmds.append(cmd)
-					cmd = []
-
-		else:
-			state[0].append(operator)
-			state[1].append(operands[o])
-
-	return cmds
 
 
 #### MEMELANG-SQL CONVERSION ####
@@ -772,86 +782,109 @@ def querify(mqry: str, meme_table=None, name_table=None):
 		if missings:
 			raise Exception("Unknown keys: " + ", ".join(missings))
 
-	cmds = cmdify(operators, operands)
-
 	queries = []
 	params = []
 
-	for cmd in cmds:
-		sql, param = subquerify(cmd, meme_table)
-		queries.append(sql)
-		params.extend(param)
+	suboperators = []
+	suboperands = []
+	for o, operator in enumerate(operators):
+		if o==0: continue
+		suboperators.append(operator)
+		suboperands.append(operands[o])
+		
+		if OPR[operator]['func'] == END:
+			if suboperators:
+				sql, param = subquerify(suboperators, suboperands, meme_table)
+				queries.append(sql)
+				params.extend(param)
+
+			suboperators = []
+			suboperands = []
+
 
 	return [' UNION '.join(queries), params]
 
 
-# Input: One mcmd memelang cmd array
+# Input: operators and operands for one Memelang command
 # Output: One SQL query string
-def subquerify(cmd: list, table=DB_TABLE_MEME):
+def subquerify(operators: list, operands: list, meme_table=None):
+	if not meme_table: meme_table=DB_TABLE_MEME
 	qry_set = {'all': False, 'of': False}
 	true_groups = {}
-	false_group = []
-	get_statements = []
 	or_groups = {}
+	false_group = []
+	get_group = []
 	true_cnt = 0
 	or_cnt = 0
 	false_cnt = 0
 
-	# Group statements logically
-	for statement in cmd:
-		if not statement or not statement[0]: continue
+	skip = False
+	suboperators = []
+	suboperands = []
+	for o, operator in enumerate(operators):
+		
+		if operator==I['A'] and operands[o]==I['qry']:
+			qry_set[operands[o+1]]=True
+			skip=True
+		
+		elif OPR[operator]['cont'] != META:
+			suboperators.append(operator)
+			suboperands.append(operands[o])
+		
+		elif skip or not suboperators:
+			skip = False
+			suboperators = []
+			suboperands = []
+		
+		else:
+			last_operator = suboperators[-1]
+			last_operand = suboperands[-1]
 
-		# FIX THIS
-		elif statement[0][0]==I['A'] and statement[1][0]==I['qry']:
-			qry_set[statement[1][1]]=True
-			continue
+			# Handle =f (false)
+			if last_operator == I['D=I'] and last_operand == I['f']:
+				false_cnt += 1
+				false_group.append([suboperators, suboperands])
+			
+			# Handle =g (get)
+			elif last_operator == I['D=I'] and last_operand == I['g']:
+				get_group.append([suboperators, suboperands])
+				continue
 
-		last_operator = statement[0][-1]
-		last_operand = statement[1][-1]
+			# Handle =tn (OR groups)
+			elif last_operator == I['D|']:
+				or_cnt += 1
+				if not or_groups.get(last_operand): or_groups[last_operand]=[]
+				or_groups[last_operand].append([suboperators, suboperands])
+			
+			# Default: Add to true conditions
+			else:
+				if OPR[last_operator]['func'] == VAL: tg=interlace(suboperators[:-1], suboperands[:-1])
+				else: tg=interlace(suboperators, suboperands)
 
-		# Handle =f (false)
-		if last_operator == I['D=I'] and last_operand == I['f']:
-			false_cnt += 1
-			false_group.append(statement)
-			continue
+				if not true_groups.get(tg): true_groups[tg]=[]
+				true_groups[tg].append([suboperators, suboperands])
+				true_cnt += 1
 
-		# Handle =g (get)
-		if last_operator == I['D=I'] and last_operand == I['g']:
-			get_statements.append(statement)
-			continue
-
-		# Handle =tn (OR groups)
-		if last_operator == I['D|']:
-			or_cnt += 1
-			if not or_groups.get(last_operand): or_groups[last_operand]=[]
-			or_groups[last_operand].append(statement)
-			continue
-
-		# Default: Add to true conditions
-		if OPR[last_operator]['func'] == VAL: tg=interlace(statement[0][:-1], statement[1][:-1])
-		else: tg=interlace(statement[0], statement[1])
-
-		if not true_groups.get(tg): true_groups[tg]=[]
-		true_groups[tg].append(statement)
-		true_cnt += 1
+			suboperators = []
+			suboperands = []
 
 	# If qry_set['all'] and no true/false/or conditions
 	if qry_set.get(I['all']) and true_cnt == 0 and false_cnt == 0 and or_cnt == 0:
-		return [f"SELECT * FROM {table}", []]
+		return [f"SELECT * FROM {meme_table}", []]
 
-	params = []
+	params   = []
 	cte_sqls = []
 	cte_outs = []
 	sql_outs = []
-	cte_cnt = -1
+	cte_cnt  = -1
 
 	# Process AND conditions (true_groups)
 	for true_group in true_groups.values():
 		wheres = []
 		cte_cnt += 1
 		# Each bid_group is a list of 
-		for statement in true_group:
-			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(statement, table)
+		for suboperators, suboperands in true_group:
+			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(suboperators, suboperands, meme_table)
 			if not wheres:
 				wheres.append(where_sql)
 				params.extend(qry_params)
@@ -872,8 +905,8 @@ def subquerify(cmd: list, table=DB_TABLE_MEME):
 		cte_cnt += 1
 		max_depth = 0
 		or_selects = []
-		for statement in or_group:
-			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(statement, table)
+		for suboperators, suboperands in or_group:
+			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(suboperators, suboperands, meme_table)
 			max_depth = max(max_depth, qry_depth)
 			
 			if cte_cnt > 0:
@@ -891,8 +924,8 @@ def subquerify(cmd: list, table=DB_TABLE_MEME):
 			raise Exception('A query with a false statement must contain at least one non-OR true statement.')
 
 		wheres = []
-		for statement in false_group:
-			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(statement, table, True)
+		for suboperators, suboperands in false_group:
+			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(suboperators, suboperands, meme_table, True)
 			wheres.append(f"a0 NOT IN (SELECT {select_sql} {from_sql} WHERE {where_sql})")
 			params.extend(qry_params)
 
@@ -903,11 +936,11 @@ def subquerify(cmd: list, table=DB_TABLE_MEME):
 
 	# select all data related to the matching As
 	if qry_set.get(I['all']):
-		sql_outs.append(f"SELECT val as v0, oid as o0, aid as a0, cid as c0, rid as r0, bid as b0, eid as e0, wal as q0 FROM {table} m0 WHERE m0.aid IN (SELECT a0 FROM z{cte_cnt})")
+		sql_outs.append(f"SELECT val as v0, aid as a0, cid as c0, did as r0, bid as b0, wal as w0, vop as vo0, wop as wo0 FROM {meme_table} m0 WHERE m0.aid IN (SELECT a0 FROM z{cte_cnt})")
 
 	else:
-		for statement in get_statements:
-			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(statement, table)
+		for suboperators, suboperands in get_group:
+			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(suboperators, suboperands, meme_table)
 			sql_outs.append(f"SELECT {select_sql} {from_sql} WHERE {where_sql} AND m0.aid IN (SELECT a0 FROM z{cte_cnt})")
 			params.extend(qry_params)
 
@@ -920,102 +953,92 @@ def subquerify(cmd: list, table=DB_TABLE_MEME):
 
 		m=0;
 		while mNum>=m:
-			sql_outs.append(f"SELECT DISTINCT v{m}, o{m}, a{m}, c{m}, r{m}, b{m}, e{m}, q{m} FROM z{zNum}" + ('' if len(cWhere)==0 else ' WHERE '+' AND '.join(cWhere) ))
+			sql_outs.append(f"SELECT DISTINCT v{m}, a{m}, c{m}, r{m}, b{m}, w{m}, vo{m}, wo{m} FROM z{zNum}" + ('' if len(cWhere)==0 else ' WHERE '+' AND '.join(cWhere) ))
 			m+=1
 
 	# Apply logic to As
 	if qry_set.get(I['of']):
-		sql_outs.append(f"SELECT m0.val AS v0, m0.oid AS o0, m0.aid AS a0, '{I['of']}' AS c0, z.rid AS r0, z.bid AS b0, z.eid AS e0, z.wal AS q0 FROM {table} m0 JOIN z{cte_cnt} AS z ON m0.aid = z.bid AND m0.cid = z.rid WHERE m0.cid={I['is']}")
+		sql_outs.append(f"SELECT m0.val AS v0, m0.aid AS a0, '{I['of']}' AS c0, z.did AS r0, z.bid AS b0, z.wal AS w0, m0.vop AS o0, z.wop AS wo0 FROM {meme_table} m0 JOIN z{cte_cnt} AS z ON m0.aid = z.bid AND m0.cid = z.did WHERE m0.cid={I['is']}")
 
 	return ['WITH ' + ', '.join(cte_sqls) + ' ' + ' UNION '.join(sql_outs), params]
 
 
-# Input: One Memelang statement array
+# Input: operators and operands for one Memelang statement
 # Output: SELECT string, FROM string, WHERE string, and depth int
-def selectify(statement, table=None, aidOnly=False):
-	if not table: table=DB_TABLE_MEME
+def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
+	if not meme_table: meme_table=DB_TABLE_MEME
 
 	params = []
 	wheres = []
-	joins = [f"FROM {table} m0"]
-	selects = ['m0.val AS v0','m0.oid AS o0','m0.aid AS a0','m0.cid AS c0','m0.rid AS r0','m0.bid AS b0','m0.eid AS e0','m0.wal AS q0']
+	joins = [f"FROM {meme_table} m0"]
+	selects = ['m0.val AS v0','m0.vop AS vo0','m0.aid AS a0','m0.cid AS c0','m0.did AS r0','m0.bid AS b0','m0.wop AS wo0','m0.wal AS w0']
 	m = 0
 	opr=None
 	val=None
+	last_rel_end=None
 
-	for i, operator in enumerate(statement[0]):
-		operand = statement[1][i]
+	for i, operator in enumerate(operators):
+		operand = operands[i]
 		side = OPR[operator]['side']
 		func = OPR[operator]['func']
 		form = OPR[operator]['form']
-
-		# A/B
-		if func == AB:
-			if operand is not None:
-				fld = 'aid' if side==COND else 'bid'
-				wheres.append(f'm{m}.{fld}=%s')
-				params.append(operand)
-
-		# = value
-		elif func == VAL:
-			# t/f
-			if form==INT:
-				opr='!='
-				val='0'
-			elif form==DEC: 
-				opr = OPR[operator]['$mid']
-				val = str(float(operand))
-			else: raise Exception('invacid form')
-			if side==DECL: wheres.append(f"m{m}.wal{opr}{val}")
+		dcol = OPR[operator]['dcol']
 
 		# REL
 		# TO DO: Work on switching V-O and E-Q
-		elif func == REL:
+		if func == REL:
 			if OPR[operator]['dpth'] == 1:
 				if side==DECL and operand is not None and operand<0:
-					selects = ['m0.val AS o0','m0.oid AS o0','m0.bid AS a0','m0.cid AS c0','m0.rid*-1 AS r0','m0.aid AS b0','m0.eid AS e0','m0.wal AS q0']
-			else:
-				if side==COND: raise Exception('What does it mean to look up an L chain?')
-				lm = m
-				m += 1
-				wheres.append(f"m{lm}.wal!=0")
-				wheres.append(f'm{m}.cid=%s')
-				params.append(I['is'])
+					selects = ['m0.val AS v0','m0.bid AS a0','m0.cid AS c0','m0.did*-1 AS r0','m0.aid AS b0','m0.wal AS w0','m0.vop AS vo0','m0.wop AS wo0']
+			
+			elif side==COND: raise Exception('What does it mean to look up a C chain?')
 
-				if  operand is not None and operand<0:
-					joins.append(f"JOIN {table} m{m} ON m{lm}.{last_rel_bid}=m{m}.bid")
+			else:
+				m += 1
+				wheres.extend([f"m{m-1}.wal!=%s", f'm{m}.cid=%s'])
+				params.extend([FALSE, I['is']])
+
+				if operand is not None and operand<0:
+					joins.append(f"JOIN {meme_table} m{m} ON m{m-1}.{last_rel_end}=m{m}.bid")
 					selects.append(f"m{m}.val AS v{m}")
-					selects.append(f"m{m}.oid AS o{m}")
 					selects.append(f"m{m}.bid AS a{m}")
 					selects.append(f"m{m}.cid AS c{m}")
-					selects.append(f"m{m}.rid*-1 AS r{m}")
+					selects.append(f"m{m}.did*-1 AS r{m}")
 					selects.append(f"m{m}.aid AS b{m}")
-					selects.append(f"m{m}.eid AS e{m}")
-					selects.append(f"m{m}.wal AS q{m}")
+					selects.append(f"m{m}.wal AS w{m}")
+					selects.append(f"m{m}.vop AS vo{m}")
+					selects.append(f"m{m}.wop AS wo{m}")
 				else:
-					joins.append(f"JOIN {table} m{m} ON m{lm}.{last_rel_bid}=m{m}.aid")
+					joins.append(f"JOIN {meme_table} m{m} ON m{m-1}.{last_rel_end}=m{m}.aid")
 					selects.append(f"m{m}.val AS v{m}")
-					selects.append(f"m{m}.oid AS o{m}")
 					selects.append(f"m{m}.aid AS a{m}")
 					selects.append(f"m{m}.cid AS c{m}")
-					selects.append(f"m{m}.rid AS r{m}")
+					selects.append(f"m{m}.did AS r{m}")
 					selects.append(f"m{m}.bid AS b{m}")
-					selects.append(f"m{m}.eid AS e{m}")
-					selects.append(f"m{m}.wal AS q{m}")
+					selects.append(f"m{m}.wal AS w{m}")
+					selects.append(f"m{m}.vop AS vo{m}")
+					selects.append(f"m{m}.wop AS wo{m}")
 
-			if operand is not None:
-				fld = 'cid' if side==COND else 'rid'
-				wheres.append(f'm{m}.{fld}=%s')
-				params.append(abs(operand))
+			last_rel_end = 'aid' if operand is not None and operand<0 else 'bid'
 
-			last_rel_bid = 'aid' if operand is not None and operand<0 else 'bid'
 
-		else:
-			raise Exception('Error: unknown operator')
+		if dcol and operand is not None:
 
+			if form in (INT, AID): operand=int(operand)
+			elif form == DEC:      operand=float(operand)
+			else:                  raise Exception('invalid form')
+
+			eql  = '=' if func != VAL else OPR[operator]['$mid']
+
+			# Special case =t to !=f
+			if form==INT and eql=='=' and operand==TRUE:
+				eql='!='
+				operand=FALSE
+
+			wheres.append(f'm{m}.{dcol}{eql}%s')
+			params.append(operand)
 
 	if aidOnly: selects = ['m0.aid AS a0']
-
 
 	return [
 		', '.join(selects),
@@ -1181,8 +1204,8 @@ def get(mqry, meme_table=None, name_table=None):
 	memes = select(sql, params)
 
 	for meme in memes:
-		output[0].extend([int(meme[1])] + ACRB + [int(meme[6]), I['END']])
-		output[1].extend([float(meme[0]), int(meme[2]), int(meme[3]), int(meme[4]), int(meme[5]), float(meme[7]), None])
+		output[0].extend([int(meme[VO])] + ACDB + [int(meme[WO]), I['END']])
+		output[1].extend([float(meme[V]), int(meme[A]), int(meme[C]), int(meme[D]), int(meme[B]), float(meme[W]), None])
 
 	if namekeys: output.extend(namify(output[1], namekeys, name_table))
 
@@ -1212,28 +1235,32 @@ def put (operators: list, operands: list, meme_table=None, name_table=None):
 	sqls = {meme_table:[], name_table:[]}
 	params = {meme_table:[], name_table:[]}
 
-	# Convert operands to IDs where possible
-	for o, operator in enumerate(operators):
-		if o==0: continue
-		elif OPR[operator]['form']==AID:
-			if isinstance(operands[o], int): pass
-			elif I.get(operands[o]): operands[o]=I[operands[o]]
-			else: missings[operands[o]]=1
-
-	# Structure input
-	cmds=cmdify(operators, operands)
 
 	# Pull out ID-KEYs
-	for cmd in cmds:
-		for suboperators, suboperands in cmd:
-			if suboperators==TACRBS and suboperands[3]==NAM and suboperands[4]==KEY:
-				key = suboperands[5]
-				aid = int(suboperands[1])
+	suboperators=[] 
+	suboperands=[]
+	for o, operator in enumerate(operators):
+		if o==0: continue
+		elif OPR[operator]['cont'] != META:
+			if OPR[operator]['form']==AID:
+				# Swap in ID or mark missing
+				if isinstance(operands[o], int): pass
+				elif I.get(operands[o]): operands[o]=I[operands[o]]
+				else: missings[operands[o]]=1
+
+			suboperators.append(operator)
+			suboperands.append(operands[o])
+		else:
+			if suboperators==VACDBS and suboperands[D]==NAM and suboperands[B]==KEY:
+				key = suboperands[W]
+				aid = int(suboperands[A])
 				missings.pop(key, None)
 				sqls[name_table].append("(%s,%s,%s)")
 				params[name_table].extend([aid, KEY, key])
 				I[key]=aid
 				K[aid]=key
+			suboperators=[] 
+			suboperands=[]
 
 	# Missing keys with no associated ID
 	if missings:
@@ -1245,31 +1272,33 @@ def put (operators: list, operands: list, meme_table=None, name_table=None):
 			I[key]=aid
 			K[aid]=key
 
+
 	# Pull out names and trues
-	for cmd in cmds:
-		for suboperators, suboperands in cmd:
-			if suboperators[1:5]!=ACRB: 
-				#print(suboperators, suboperands)
-				#exit()
-				continue
+	suboperators=[] 
+	suboperands=[]
+	for o, operator in enumerate(operators):
+		if o==0: continue
 
-			# Convert to new IDs
-			for ca, subopertor in enumerate(suboperators):
-				if OPR[suboperators[ca]]['form']==AID and isinstance(suboperands[ca], str):
-					suboperands[ca]=I[suboperands[ca]]
-
-			# Val=A[C]R]B=String
-			if suboperators[5]==I['D=S']:
-				if suboperands[4]==KEY: continue # Keys are already done
-				params[name_table].extend([suboperands[1], suboperands[4], suboperands[5]])
+		elif OPR[operator]['cont'] != META:
+			# Swap in IDs
+			if OPR[operator]['form']==AID and isinstance(operands[o], str): operands[o]=I[operands[o]]
+			suboperators.append(operator)
+			suboperands.append(operands[o])
+		
+		else:
+			# Val=A[C]D]B=String
+			if suboperators[W]==I['D=S']:
+				if suboperands[B]==KEY: continue # Keys are already done
+				params[name_table].extend([suboperands[A], suboperands[B], suboperands[W]])
 				sqls[name_table].append('(%s,%s,%s)')
 
-			# Val=A[C]R]B=Decimal/True
+			# V=A[C]D]B=W
 			else:
-				suboperands.insert(5, suboperators[5])
-				suboperands.insert(1, suboperators[0])
-				params[meme_table].extend(suboperands)
+				params[meme_table].extend(suboperands + [suboperators[V], suboperators[W]])
 				sqls[meme_table].append('(%s,%s,%s,%s,%s,%s,%s,%s)')
+
+			suboperators=[] 
+			suboperands=[]
 
 	for tbl in params:
 		if params[tbl]:
@@ -1297,24 +1326,42 @@ def dename(mqry: str):
 # Apply logic
 # FIX THIS
 def logify (operators: list, operands: list):
-	ais = {}
-	cmds=cmdify(operators, operands)
+	ACs = {}
 
 	# Pull out A[C]D]B logic rules
-	for cmd in cmds:
-		for suboperators, suboperands in cmd:
-			if suboperators[1:5] == ACRB and suboperands[1]!=I['is']:
-				if not ais.get(suboperands[0]): ais[suboperands[0]]={}
-				if not ais[suboperands[0]].get(suboperands[1]): ais[suboperands[0]][suboperands[1]]=[]
-				ais[suboperands[0]][suboperands[1]].append([suboperators[3:], suboperands[2:]])
+	suboperators=[] 
+	suboperands=[]
+	for o, operator in enumerate(operators):
+		if o==0: continue
+		elif OPR[operator]['cont'] != META:
+			suboperators.append(operator)
+			suboperands.append(operands[o])
+		else:
+			if suboperators[V:B+1] == VACDB and suboperands[C]!=I['is']:
+				if not ACs.get(suboperands[A]): ACs[suboperands[A]]={}
+				if not ACs[suboperands[A]].get(suboperands[C]): ACs[suboperands[A]][suboperands[C]]=[]
+				ACs[suboperands[A]][suboperands[C]].append([suboperators, suboperands])
+			suboperators=[] 
+			suboperands=[]
 
-	# Apply A[C]D]B=t rules to C for A[C]C => C[R]B=t
-	for cmd in cmds:
-		for suboperators, suboperands in cmd:
-			if suboperators[1:5] == ACRB and suboperands[1]==I['is'] and ais.get(suboperands[3]) and ais[suboperands[3]].get(suboperands[2]):
-				for logioperators, logioperands in ais[suboperands[3]][suboperands[2]]:
-					operators.extend([I['A'], I['C'], I['D']] + logioperators + [I['END']])
-					operands.extend(suboperands[0:1] + [I['of']] + logioperands + [I['END']])
+	# Apply A[C]D]B=t rules to C for X]C]A => X]D]B=t
+	o=0
+	olen=len(operators)-1
+	suboperators=[]
+	suboperands=[]
+	while o<olen:
+		o+=1
+		if OPR[operators[o]]['cont'] != META:
+			suboperators.append(operators[o])
+			suboperands.append(operands[o])
+		else:
+			if suboperators[V:B+1] == VACDB and suboperands[C]==I['is'] and ACs.get(suboperands[B]) and ACs[suboperands[B]].get(suboperands[D]):
+				for logioperators, logioperands in ACs[suboperands[B]][suboperands[D]]:
+					operators.extend(VACDB + [logioperators[W], I['END']])
+					operands.extend([TRUE, suboperands[A], I['of'], logioperands[D], logioperands[B], logioperands[W], I['END']])
+					olen+=1
+			suboperators=[] 
+			suboperands=[]	
 
 
 #### MEME FILE ####

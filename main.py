@@ -53,7 +53,7 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), oid SMALLINT, aid BIGINT, cid BIGINT, rid BIGINT, bid BIGINT, eid SMALLINT, wal DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), aid BIGINT, cid BIGINT, did BIGINT, bid BIGINT, wal DECIMAL(20,6), vop SMALLINT, wop SMALLINT); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,did,bid); CREATE INDEX {DB_TABLE_MEME}_did_idx ON {DB_TABLE_MEME} (did); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
@@ -77,9 +77,9 @@ def tabledel():
 
 
 def logitest():
-	operators, operands = memelang.delace('a]rz:bz=1;a]rx:bx=1;rx[bx]ry:by=t;rz[bz]rj')
+	operators, operands = memelang.delace('a]rz]bz=t;a]rx]bx=t;bx[rx]ry]by=t;bz[rz]rj]')
 	print(operators, operands)
-	memelang.expand(operators, operands)
+	memelang.sequence(operators, operands, 'expand')
 	print(operators, operands)
 	memelang.logify(operators, operands)
 	print(memelang.interlace(operators, operands,{'newline':True}))
@@ -93,11 +93,15 @@ def memeprint(operators, operands):
 	br = f"+{'-' * 25}+{'-' * 25}+{'-' * 25}+"
 	print(f"{br}\n| {'A':<23} | {'D':<23} | {'B=V':<23} |\n{br}")
 
-	cmds = memelang.cmdify(operators, operands)
-
-	for cmd in cmds:
-		for suboperators, suboperands in cmd:
-			if suboperators[:5]==TACRB and suboperands[2] in (I['is'], 'is', I['of'], 'of'):
+	suboperators=[] 
+	suboperands=[]
+	for o, operator in enumerate(operators):
+		if o==0: continue
+		elif OPR[operator]['cont'] != META:
+			suboperators.append(operator)
+			suboperands.append(operands[o])
+		else:
+			if suboperators[:5]==VACDB and suboperands[2] in (I['is'], 'is', I['of'], 'of'):
 				found = True
 				meme=list(map(str, suboperands))
 
@@ -108,9 +112,10 @@ def memeprint(operators, operands):
 
 				print(f"| {meme[1][:23]:<23} | {meme[3][:23]:<23} | {bq[:23]:<23} |")
 
+			suboperators=[] 
+			suboperands=[]
 
 	if not found: print(f"| {'No matching memes':<76} |")
-
 
 	print(br)
 
