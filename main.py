@@ -23,6 +23,12 @@ def qry(mqry):
 
 	print(f"\nSQL: {full_sql}\n")
 
+	operators, operands = memelang.parse(mqry)
+	print ("MEME:")
+	print(operators)
+	print(operands)
+	print (memelang.deparse(operators, operands)+"\n")
+
 	# Execute query
 	memes = memelang.get(mqry+' qry.nam:key=1')
 	memeprint(memes[0], memes[2])
@@ -77,43 +83,44 @@ def tabledel():
 
 
 def logitest():
-	operators, operands = memelang.delace('a]rz]bz=t;a]rx]bx=t;bx[rx]ry]by=t;bz[rz]rj]')
+	operators, operands = memelang.parse('a]rz]bz=t;a]rx]bx=t;bx[rx]ry]by=t;bz[rz]rj]')
+
 	print(operators, operands)
+	print()
 	memelang.sequence(operators, operands, 'expand')
+
 	print(operators, operands)
+	print()
+
 	memelang.logify(operators, operands)
-	print(memelang.interlace(operators, operands,{'newline':True}))
+	print(memelang.deparse(operators, operands,{'newline':True}))
 
 
 
 def memeprint(operators, operands):
 	found = False
-	length = len(operators)
 
 	br = f"+{'-' * 25}+{'-' * 25}+{'-' * 25}+"
 	print(f"{br}\n| {'A':<23} | {'D':<23} | {'B=V':<23} |\n{br}")
 
-	suboperators=[] 
-	suboperands=[]
-	for o, operator in enumerate(operators):
-		if o==0: continue
-		elif OPR[operator]['cont'] != META:
-			suboperators.append(operator)
-			suboperands.append(operands[o])
-		else:
-			if suboperators[:5]==VACDB and suboperands[2] in (I['is'], 'is', I['of'], 'of'):
+	o=1
+	olen=len(operators)
+	while o<olen:
+		if operators[o]!=I['END']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
+		slen=int(operands[o])
+		o+=1
+		if slen and operators[o:o+W]==VACDB and operands[o+C] in (I['is'], 'is', I['of'], 'of'):
 				found = True
-				meme=list(map(str, suboperands))
+				meme=list(map(str, operands[o:o+slen]))
 
-				if suboperators[5]==I['D=I']: bq=meme[4]
-				elif suboperators[5]==I['D=S']: bq='"'+meme[5]+'"'
-				elif suboperators[5]==I['D=D']: bq=meme[5].rstrip('0').rstrip('.')+' '+meme[4]
-				else: bq=OPR[suboperators[5]]['$beg']+' '+meme[5].rstrip('0').rstrip('.')+' '+meme[4]
+				if operators[o+W]==I['D=T']: bq=meme[B]
+				elif operators[o+W]==I['D$']: bq='"'+meme[W]+'"'
+				elif operators[o+W]==I['D.']: bq=meme[W].rstrip('0').rstrip('.')+' '+meme[B]
+				else: bq=OPR[operators[o+W]]['$beg']+' '+meme[W].rstrip('0').rstrip('.')+' '+meme[B]
 
 				print(f"| {meme[1][:23]:<23} | {meme[3][:23]:<23} | {bq[:23]:<23} |")
 
-			suboperators=[] 
-			suboperands=[]
+		o+=slen
 
 	if not found: print(f"| {'No matching memes':<76} |")
 

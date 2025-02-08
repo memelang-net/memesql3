@@ -29,13 +29,13 @@ Installation on Ubuntu:
 	# Create postgres DB and user from the CLI
 	sudo python3 ./main.py dbadd
 
-	# Create meme and term tables in the DB
+	# Create meme and name tables in the DB
 	sudo python3 ./main.py tableadd
 
-	# Load core terms
+	# Load core names
 	python3 ./main.py file ./core.meme
 
-	# Load example presidents data (optional)
+	# (Optional) load example presidents data
 	python3 ./main.py file ./presidents.meme
 
 

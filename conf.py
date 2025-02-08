@@ -10,10 +10,14 @@ DB_TABLE_NAME='name'
 # Global dictionary to cache key->id mappings
 I = {
 
-	'C=?'  : 10, # Left unkown value type
-	'C=I'  : 11, # Left integer
-	'C=S'  : 12, # Left string
-	'C=D'  : 13, # Left decimal
+	'f'   : 0,
+	't'   : 1,
+	'g'   : 2,
+
+	'C=?' : 10, # Left unkown value type
+	'C=T' : 11, # Left integer
+	'C$'  : 12, # Left string
+	'C.'  : 13, # Left decimal
 	
 	'C>'  : 21,
 	'C<'  : 22,
@@ -34,11 +38,12 @@ I = {
 	'D<=' : 54,
 	'D!=' : 55,
 
-	'D=?'  : 40,
-	'D=I'  : 41,
-	'D=S'  : 42,
-	'D=D'  : 43,
+	'D=?' : 40,
+	'D=T' : 41,
+	'D$'  : 42,
+	'D.'  : 43,
 
+	'&'   : 69,
 	'C|'  : 70,
 	'D|'  : 71,
 	'C&'  : 72,
