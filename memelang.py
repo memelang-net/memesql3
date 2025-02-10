@@ -30,11 +30,11 @@ GET    = 2
 ENDVAL = 0.5
 
 # Forms
-NON    = 10		# Value has no form, like END
-INT    = 11		# Value is integer, like True, False, Get
-DEC    = 12		# Value is decimal number
-AID    = 13		# Value is an ID integer
-STR    = 14		# Value is a string
+NON    = 1		# Value has no form, like END
+INT    = 2		# Value is integer, like True, False, Get
+DEC    = 3		# Value is decimal number
+AID    = 4		# Value is an ID integer
+STR    = 5		# Value is a string
 
 # Each operator and its meaning
 OPR = {
@@ -209,7 +209,7 @@ SERIAL = {
 		('=', '.') : ('.', LEFTSHIFT_OPERAND),
 		('=', '"') : ('"', LEFTSHIFT_OPERAND),
 	},
-	2 : { # Merge ] with D
+	2 : { # Merge ] and D
 		(']', '#') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
 		(']', '$') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
 	},
@@ -225,7 +225,7 @@ SERIAL = {
 		(']', '<=') : (':', KEEP_OPERATOR),
 		(']', '!=') : (':', KEEP_OPERATOR),
 	},
-	4 : { # Turn ] into ]] or &]
+	4 : { # Turn ] into ]] or &
 		(']', ']') : (KEEP_OPERATOR, ']]'),
 		(']]', ']') : (KEEP_OPERATOR, ']]'),
 		(' ', ']') : ('&', LEFTSHIFT_OPERAND),
@@ -251,22 +251,59 @@ SEQ = {
 }
 
 
+#### GENERAL STRINGS #####
+
 # Conbine SQL and parameters into a string
 def morfigy(sql: str, params: list) -> str:
-	new_query = sql
-	for param in params:
-
-		if isinstance(param, str): param = "'"+str(param).replace("'", "''")+"'"
-		else: param = str(param)
-
-		new_query = new_query.replace("%s", param, 1)
-	return new_query
+    for param in params:
+        rep = param.replace("'", "''") if isinstance(param, str) else str(param)
+        sql = sql.replace("%s", rep, 1)
+    return sql
 
 
 # Input: string "John Adams"
 # Output: lowercase underscored string "john_adams"
 def slugify(string: str) -> str:
 	return re.sub(r'__+', '_', re.sub(r'[^a-z0-9]', '_', string.lower())).strip('_')
+
+
+#### POSTGRES QUERIES #####
+
+def select(query: str, params: list = []):
+	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
+	with psycopg2.connect(conn_str) as conn:
+		cursor = conn.cursor()
+		cursor.execute(query, params)
+		rows=cursor.fetchall()
+		return [list(row) for row in rows]
+
+
+def insert(query: str, params: list = []):
+	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
+	with psycopg2.connect(conn_str) as conn:
+		cursor = conn.cursor()
+		cursor.execute(query, params)
+
+
+def maxnum(col: str = 'aid', table: str = None):
+	if not table: table=DB_TABLE_MEME
+	result = select(f"SELECT MAX({col}) FROM {table}")
+	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
+
+
+def selectin(cols: dict = {}, table: str = None):
+	if not table: table=DB_TABLE_NAME
+
+	conds = []
+	params = []
+
+	for col in cols:
+		conds.append(f"{col} IN ("+ ','.join(['%s'] * len(cols[col])) +")")
+		params.extend(cols[col])
+
+	if not conds: return []
+
+	return select(f"SELECT DISTINCT aid, bid, str FROM {table} WHERE " + ' AND '.join(conds), params)
 
 
 #### MEMELANG QUERY PARSING ####
@@ -287,10 +324,8 @@ def parse(mqry: str):
 	# Prepend zero before decimals, such as =.5 to =0.5
 	mqry = re.sub(r'([<>=])(\-?)\.([0-9])', lambda m: f"{m.group(1)}{m.group(2)}0.{m.group(3)}", mqry)
 
-	if len(mqry) == 0: raise Exception("Error: Empty query provided.")
-
-	mqry_chars = list(mqry)
-	mqry_len = len(mqry_chars)
+	mqry_len = len(mqry)
+	if mqry_len == 0: raise Exception("Error: Empty query provided.")
 
 	preoperators = ['opr', ';']
 	preoperands = [I['mix'], ENDVAL]
@@ -298,16 +333,11 @@ def parse(mqry: str):
 
 	i = 0
 	while i < mqry_len:
-		c = mqry_chars[i]
+		c = mqry[i]
 		operand = ''
 
-		# Comment: skip until newline
-		if c == '/' and i+1 < mqry_len and mqry_chars[i+1] == '/':
-			while i < mqry_len and mqry_chars[i] != '\n': i += 1
-			i += 1
-
 		# Operators
-		elif c in CHRTOK:
+		if c in CHRTOK:
 			preoperators.append(c)
 			preoperands.append(None)
 
@@ -323,7 +353,7 @@ def parse(mqry: str):
 		elif c == '"':
 			while i < mqry_len-1:
 				i += 1
-				ch = mqry_chars[i]
+				ch = mqry[i]
 				if ch=='\\': pass
 				elif ch=='"':
 					i+=1
@@ -336,19 +366,19 @@ def parse(mqry: str):
 
 		# key/int/float
 		else:
-			while i < mqry_len and re.match(r'[a-z0-9_\.\-]', mqry_chars[i]):
-				operand += mqry_chars[i]
-				i += 1
+			m = re.match(r'[a-z0-9_.-]+', mqry[i:])
+			if not m: raise Exception(f"Memelang parse error: Unexpected '{c}' at char {i} in {mqry}")
+			operand = m.group()
+			i += len(operand)
 
-			if not len(operand): raise Exception(f"Memelang parse error: Unexpected '{c}' at char {i} in {mqry}")
+			operator = (
+				'.' if '.' in operand else
+				'@' if operand in ('0','1','2','t','f','g') else
+				'#' if re.match(r'^-?[0-9]+$', operand) else
+				'$'
+			)
 
-			if '.' in operand: preoperators.append('.')
-			elif operand in ('0','1','2','t','f','g'):
-				preoperators.append('@')
-				operand=I[operand]
-			elif re.match(r'^-?[0-9]+$', operand): preoperators.append('#')
-			else: preoperators.append('$')
-			
+			preoperators.append(operator)			
 			preoperands.append(operand)
 			preoperands[beg]+=1
 
@@ -420,9 +450,6 @@ def parse(mqry: str):
 
 def serialize (operators: list, operands: list, allRight: bool = False, phases: list = [0, 1, 2, 3, 4, 5, 6]):
 
-	#print(operators)
-	#print(operands)
-
 	# FIX LATER
 	if allRight: operators = [']' if x == '[' else x for x in operators]
 
@@ -469,10 +496,6 @@ def serialize (operators: list, operands: list, allRight: bool = False, phases: 
 		operators.pop()
 		operands.pop()
 	olen-=2
-
-	#print(operators)
-	#print(operands)
-	#print()
 
 	return operators, operands
 
@@ -563,7 +586,7 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 
 # Input: Memelang query string
 # Output: SQL query string
-def querify(mqry: str, meme_table=None, name_table=None):
+def querify(mqry: str, meme_table: str = None, name_table: str = None):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
 
@@ -599,22 +622,16 @@ def querify(mqry: str, meme_table=None, name_table=None):
 def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	qry_set = {'all': False, 'of': False}
-	true_group = []
 	or_groups = {}
 	false_group = []
 	get_group = []
-	true_cnt = 0
 	or_cnt = 0
 	false_cnt = 0
-
 	skip = False
-	suboperators = []
-	suboperands = []
 
 	olen=len(operators)
 	o=0
 	beg=0
-	slen=0
 	markers=[]
 	while o<olen:
 		aperator=abs(operators[o])
@@ -650,11 +667,11 @@ def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1)
 		
 		# Default: Add to true conditions
 		else:
-			true_group.append([operators[beg:end], operands[beg:end]])
-			true_cnt += 1
+			or_cnt += 1
+			or_groups[99+or_cnt]=[[operators[beg:end], operands[beg:end]]]
 
 	# If qry_set['all'] and no true/false/or conditions
-	if qry_set.get(I['all']) and true_cnt == 0 and false_cnt == 0 and or_cnt == 0:
+	if qry_set.get(I['all']) and false_cnt == 0 and or_cnt == 0:
 		return [f"SELECT * FROM {meme_table}", []]
 
 	cte_cnt  = cte_beg
@@ -662,16 +679,6 @@ def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1)
 	cte_sqls = []
 	cte_outs = []
 	sql_outs = []
-
-	# Process AND conditions
-	for suboperators, suboperands in true_group:
-		select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(suboperators, suboperands, meme_table)
-		wheres = [where_sql]
-		params.extend(qry_params)
-		if cte_cnt > cte_beg: wheres.append(f"{select_sql[14:21]} IN (SELECT a0 FROM z{cte_cnt})")
-		cte_cnt += 1
-		cte_sqls.append(f"z{cte_cnt} AS (SELECT {select_sql} {from_sql} WHERE {' AND '.join(wheres)})")
-		cte_outs.append((cte_cnt, qry_depth))
 
 	# Process OR groups
 	for or_group in or_groups.values():
@@ -692,7 +699,7 @@ def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1)
 
 	# Process NOT conditions (false_group)
 	if false_cnt:
-		if true_cnt < 1:
+		if or_cnt < 1:
 			raise Exception('A query with a false statement must contain at least one non-OR true statement.')
 
 		wheres = []
@@ -729,7 +736,6 @@ def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1)
 	if qry_set.get(I['of']):
 		sql_outs.append(f"SELECT m0.val AS v0, m0.aid AS a0, '{I['of']}' AS c0, z.did AS r0, z.bid AS b0, z.wal AS w0, m0.vop AS o0, z.wop AS wo0 FROM {meme_table} m0 JOIN z{cte_cnt} AS z ON m0.aid = z.bid AND m0.cid = z.did WHERE m0.cid={I['is']}")
 
-	#return ['WITH ' + ', '.join(cte_sqls) + ' ' + ' UNION '.join(sql_outs), params]
 	return cte_sqls, sql_outs, params
 
 
@@ -743,8 +749,6 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	joins = [f"FROM {meme_table} m0"]
 	selects = ['m0.val AS v0','m0.aid AS a0','m0.cid AS c0','m0.did AS r0','m0.bid AS b0','m0.wal AS w0','m0.vop AS vo0','m0.wop AS wo0']
 	m = 0
-	opr=None
-	val=None
 	last_rel_end=None
 	waldone=False
 
@@ -830,64 +834,13 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	]
 
 
-#### POSTGRES QUERIES #####
-
-def select(query: str, params: list = []):
-	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
-	with psycopg2.connect(conn_str) as conn:
-		cursor = conn.cursor()
-		cursor.execute(query, params)
-		rows=cursor.fetchall()
-		return [list(row) for row in rows]
-
-
-def insert(query: str, params: list = []):
-	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
-	with psycopg2.connect(conn_str) as conn:
-		cursor = conn.cursor()
-		cursor.execute(query, params)
-
-
-def selnum(query: str):
-	result = select(query)
-	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
-
-
-def maxnum(col: str = 'aid', table: str = None):
-	if not table: table=DB_TABLE_MEME
-	result = select(f"SELECT MAX({col}) FROM {table}")
-	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
-
-
-# Input list of aids and list of bids
-# Output names from DB
-def selectnames(aids: list = [], bids: list = [], strings: list = [], table: str = None):
-	if not table: table=DB_TABLE_NAME
-
-	conds = []
-	params = []
-	if bids: 
-		conds.append(f"bid IN ("+ ','.join(['%s'] * len(bids)) +")")
-		params.extend(map(int, bids))
-	if aids: 
-		conds.append(f"aid IN ("+ ','.join(['%s'] * len(aids)) +")")
-		params.extend(map(int, aids))
-	if strings: 
-		conds.append(f"str IN ("+ ','.join(['%s'] * len(strings)) +")")
-		params.extend(map(str, strings))
-
-	if not conds: raise Exception('No conds')
-
-	return select(f"SELECT DISTINCT aid, bid, str FROM {table} WHERE " + ' AND '.join(conds), params)
-
-
 #### KEY-ID CONVERSION ####
 
 # Input list of key strings ['george_washington', 'john_adams']
 # Load key->aids in I and K caches
 # I['john_adams']=123
 # K[123]='john_adams'
-def aidcache(keys, name_table=None):
+def aidcache(keys: list, name_table: str = None):
 	if not name_table: name_table=DB_TABLE_NAME
 	if not keys: return
 
@@ -895,7 +848,7 @@ def aidcache(keys, name_table=None):
 
 	if not uncached_keys: return
 
-	rows=selectnames([], [KEY], uncached_keys, name_table)
+	rows=selectin({'bid':[KEY], 'str':uncached_keys}, name_table)
 
 	for row in rows:
 		I[row[2]] = int(row[0])
@@ -905,7 +858,7 @@ def aidcache(keys, name_table=None):
 # Input value is a list of strings ['a', 'b', 'c', 'd']
 # Load key->aid
 # Return the data with any keys with ids
-def identify(keys: list, name_table=None):
+def identify(keys: list, name_table: str  = None):
 	if not name_table: name_table=DB_TABLE_NAME
 	ids = []
 
@@ -929,7 +882,7 @@ def identify(keys: list, name_table=None):
 	return ids
 
 
-def identify1(val, name_table=None):
+def identify1(val: str, name_table: str = None):
 	if not name_table: name_table=DB_TABLE_NAME
 	ids = identify([val], name_table)
 	return ids[0] if isinstance(ids[0], int) else False
@@ -938,7 +891,7 @@ def identify1(val, name_table=None):
 # Input value is a list of ints [123,456,789]
 # Load aid->key
 # Return the data with any aids replaced with keys
-def namify(operands: list, bids: list, name_table=None):
+def namify(operands: list, bids: list, name_table: str = None):
 	if not name_table: name_table=DB_TABLE_NAME
 	missings=[]
 
@@ -950,7 +903,7 @@ def namify(operands: list, bids: list, name_table=None):
 	for i,operand in enumerate(operands):
 		if isinstance(operand, int): matches.append(abs(operands[i]))
 
-	names = selectnames(matches, bids, [], name_table)
+	names = selectin({'aid' : matches, 'bid': bids}, name_table)
 
 	namemap = {}
 	for name in names:
@@ -976,7 +929,7 @@ def namify(operands: list, bids: list, name_table=None):
 # Replace keys with aids
 # Execute in DB
 # Return results (optionally with "qry.nam:key=1")
-def get(mqry, meme_table=None, name_table=None):
+def get(mqry: str, meme_table: str = None, name_table: str = None):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
 	output=[[I['opr']], [I['id']]]
@@ -994,12 +947,14 @@ def get(mqry, meme_table=None, name_table=None):
 
 
 # Return meme count of above results
-def count(mqry, meme_table=DB_TABLE_MEME, name_table=DB_TABLE_NAME):
+def count(mqry: str, meme_table: str = None, name_table: str = None):
+	if not meme_table: meme_table=DB_TABLE_MEME
+	if not name_table: name_table=DB_TABLE_NAME
 	sql, params = querify(mqry, meme_table)
 	return len(select(sql, params))
 
 
-def put (operators: list, operands: list, meme_table=None, name_table=None):
+def put (operators: list, operands: list, meme_table: str = None, name_table: str = None):
 	if not operators: return operators, operands
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
@@ -1011,8 +966,6 @@ def put (operators: list, operands: list, meme_table=None, name_table=None):
 	sequence(operators, operands, 'expand')
 
 	missings = {}
-	name_sqls = []
-	name_params = []
 	sqls = {meme_table:[], name_table:[]}
 	params = {meme_table:[], name_table:[]}
 
@@ -1137,7 +1090,7 @@ def logify (operators: list, operands: list):
 
 #### MEME FILE ####
 
-def read (file_path):
+def read (file_path: str):
 	output = [[I['opr']],[I['mix']]]
 	with open(file_path, 'r', encoding='utf-8') as f:
 		for ln, line in enumerate(f, start=1):
@@ -1150,6 +1103,6 @@ def read (file_path):
 	return output[0], output[1]
 
 
-def write (file_path, operators: list, operands: list):
+def write (file_path: str, operators: list, operands: list):
 	with open(file_path, 'w', encoding='utf-8') as file:
 		file.write(deparse(operators, operands, {'newline':True}))
