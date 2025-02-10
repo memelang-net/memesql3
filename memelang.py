@@ -44,7 +44,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : TRUE,
 		'$beg' : '=',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['$']: {
@@ -53,7 +52,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '="',
-		'$mid' : '',
 		'$end' : '"',
 	},
 	I['.']: {
@@ -62,7 +60,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '=',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['>']: {
@@ -71,7 +68,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '>',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['<']: {
@@ -80,7 +76,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '<',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['>=']: {
@@ -89,7 +84,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '>=',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['<=']: {
@@ -98,7 +92,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '<=',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['!=']: {
@@ -107,7 +100,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '!=',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I[':']: {
@@ -116,7 +108,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : ']',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I[']']: {
@@ -125,7 +116,6 @@ OPR = {
 		'dpth' : 1,
 		'dval' : I['is'],
 		'$beg' : ']',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I[']]']: {
@@ -134,7 +124,6 @@ OPR = {
 		'dpth' : 2,
 		'dval' : None,
 		'$beg' : ']',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['&']: {
@@ -143,7 +132,6 @@ OPR = {
 		'dpth' : 3,
 		'dval' : None,
 		'$beg' : ' ]',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I['|']: {
@@ -152,7 +140,6 @@ OPR = {
 		'dpth' : 0,
 		'dval' : None,
 		'$beg' : '',
-		'$mid' : '',
 		'$end' : '',
 	},
 	I[';']: {
@@ -160,8 +147,7 @@ OPR = {
 		'dcol' : None,
 		'dpth' : 3,
 		'dval' : ENDVAL,
-		'$beg' : '',
-		'$mid' : ';',
+		'$beg' : ';',
 		'$end' : '',
 	},
 	I['opr']: { # Actually starts operators, treat as close of non-existant prior statement
@@ -170,7 +156,6 @@ OPR = {
 		'dpth' : 3,
 		'dval' : I['mix'],
 		'$beg' : '',
-		'$mid' : '',
 		'$end' : '',
 	},
 }
@@ -196,18 +181,19 @@ CHRTOK = {
 	"<": 1,
 }
 
-REMOVE_OPERATOR=-2
+REMOVE_OPERATOR=-3
+REMOVE_IF_EMPTY=-2
 LEFTSHIFT_OPERAND=-1
 KEEP_OPERATOR=1
-SERSEQ = {
-	0 : {
+SERIAL = {
+	0 : { # Merge > and =
 		('>', '=') : ('>=', REMOVE_OPERATOR),
 		('<', '=') : ('<=', REMOVE_OPERATOR),
 		('!', '=') : ('!=', REMOVE_OPERATOR),
+	},
+	1 : { # Merge <>= and 123.456
 		(';', '$') : (KEEP_OPERATOR, ']'), # Not sure about this
 		(';', '#') : (KEEP_OPERATOR, ']'),  # Not sure about this
-	},
-	1 : {
 		('>', '#') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
 		('<', '#') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
 		('>=', '#') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
@@ -218,15 +204,16 @@ SERSEQ = {
 		('>=', '.') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
 		('<=', '.') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
 		('!=', '.') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
-	},
-	2 : {
-		(']', '#') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
-		(']', '$') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
-		('=', '#') : ('#', LEFTSHIFT_OPERAND),
+		('=', '@') : ('#', LEFTSHIFT_OPERAND),
+		('=', '#') : ('.', LEFTSHIFT_OPERAND),
 		('=', '.') : ('.', LEFTSHIFT_OPERAND),
 		('=', '"') : ('"', LEFTSHIFT_OPERAND),
 	},
-	3 : {
+	2 : { # Merge ] with D
+		(']', '#') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
+		(']', '$') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
+	},
+	3 : { # Turn last ]D into ]B
 		(']', ';') : (':', KEEP_OPERATOR),
 		(']', ' ') : (':', KEEP_OPERATOR),
 		(']', '.') : (':', KEEP_OPERATOR),
@@ -238,10 +225,18 @@ SERSEQ = {
 		(']', '<=') : (':', KEEP_OPERATOR),
 		(']', '!=') : (':', KEEP_OPERATOR),
 	},
-	4 : {
+	4 : { # Turn ] into ]] or &]
 		(']', ']') : (KEEP_OPERATOR, ']]'),
+		(']]', ']') : (KEEP_OPERATOR, ']]'),
 		(' ', ']') : ('&', LEFTSHIFT_OPERAND),
 		('"', ';') : ('$', KEEP_OPERATOR),
+	},
+	5 : {
+		('&', ']') : (KEEP_OPERATOR, ']]'),
+	},
+	6 : {
+		('[', ']') : (REMOVE_IF_EMPTY, KEEP_OPERATOR),
+		(';', ';') : (KEEP_OPERATOR, LEFTSHIFT_OPERAND),
 	}
 }
 
@@ -348,78 +343,107 @@ def parse(mqry: str):
 			if not len(operand): raise Exception(f"Memelang parse error: Unexpected '{c}' at char {i} in {mqry}")
 
 			if '.' in operand: preoperators.append('.')
-			elif operand.isdigit(): preoperators.append('#')
-			elif operand in ('t','f','g'):
-				preoperators.append('#')
+			elif operand in ('0','1','2','t','f','g'):
+				preoperators.append('@')
 				operand=I[operand]
+			elif re.match(r'^-?[0-9]+$', operand): preoperators.append('#')
 			else: preoperators.append('$')
 			
 			preoperands.append(operand)
 			preoperands[beg]+=1
 
-	operators=[I['opr']]
+	operators=['opr']
 	operands=[I['mix']]
+
+	# Merge > and =
+	preoperators, preoperands = serialize(preoperators, preoperands, False, [0])
 
 	o=1
 	olen=len(preoperators)
 	while o<olen:
 		if preoperators[o]!=';': raise Exception(f'Operator counting error at {o} for {preoperators[o]}')
 		slen=int(preoperands[o])
-		if slen:
-
-			left=1
+		if not slen: o+=1
+		else:
+			o+=1
+			left=0
 			beg=len(operators)
-			operators.append(I[';'])
+			operators.append(';')
 			operands.append(ENDVAL)
 
 			# Divide statement into left/right sides
-			while left<=slen:
+			while left<slen:
 				if preoperators[o+left]==']': break
 				left+=1
 
+			#print(preoperators[o:o+slen], left, slen)
+
 			# Process left side
-			if left>1:
-				leftoperators, leftoperands = serialize(preoperators[o+1:o+left][::-1], preoperands[o+1:o+left][::-1])
-				operators.extend([op*-1 for op in leftoperators[::-1]])
+			if left>0:
+				leftoperators, leftoperands = serialize(preoperators[o:o+left][::-1], preoperands[o:o+left][::-1], True, [1,2,3,4,5])
+				operators.extend([f'-{op}' for op in leftoperators[::-1]])
 				operands.extend(leftoperands[::-1])
 				operands[beg]+=len(leftoperators)
 
 			# Process right side
 			if left<slen:
-				rightoperators, rightoperands = serialize(preoperators[o+left:o+slen+1], preoperands[o+left:o+slen+1])
+				rightoperators, rightoperands = serialize(preoperators[o+left:o+slen], preoperands[o+left:o+slen], True, [1,2,3,4,5])
 				operators.extend(rightoperators)
 				operands.extend(rightoperands)
 				operands[beg]+=len(rightoperators)
 			else:
-				operators.append(I[']'])
+				operators.append(']')
 				operands.append(None)
 				operands[beg]+=1
 
-		o+=slen+1
+			o+=slen
+
+	# Merge ;;
+	operators, operands = serialize(operators, operands, False, [6])
+
+	o=0
+	olen=len(operators)
+	while o<olen:
+		if I.get(operators[o]): 
+			operators[o]=I[operators[o]]
+			form = OPR[abs(operators[o])]['form']
+			if form == INT: operands[o]=int(operands[o])
+			elif form == DEC: operands[o]=float(operands[o])
+
+		else: 
+			print(operators)
+			raise Exception(f'Invalid "{operators[o]}" at {o}')
+		o+=1
 
 	return operators, operands
 
 
-def serialize (operators: list, operands: list):
+def serialize (operators: list, operands: list, allRight: bool = False, phases: list = [0, 1, 2, 3, 4, 5, 6]):
 
 	#print(operators)
 	#print(operands)
 
 	# FIX LATER
-	operators = [']' if x == '[' else x for x in operators]
+	if allRight: operators = [']' if x == '[' else x for x in operators]
 
-	operators.insert(0, ';')
-	operands.insert(0, ENDVAL)
-	operators.append(';')
-	operands.append(ENDVAL)
+	pop0=False
+	pop1=False
+	if operators[0]!=';':
+		pop0=True
+		operators.insert(0, ';')
+		operands.insert(0, ENDVAL)
+	if operators[-1]!=';':
+		pop1=True
+		operators.append(';')
+		operands.append(ENDVAL)
 
 	olen=len(operators)
-	for phase in SERSEQ:
+	for phase in phases:
 		o=0
 		while o<olen:
-			if SERSEQ[phase].get(tuple(operators[o:o+2])):
+			if SERIAL[phase].get(tuple(operators[o:o+2])):
 				offset=0
-				instructions=SERSEQ[phase].get(tuple(operators[o:o+2]))
+				instructions=SERIAL[phase].get(tuple(operators[o:o+2]))
 				for i, instr in enumerate(instructions):
 					if isinstance(instr, str): operators[o+i+offset]=instr
 					elif instr == KEEP_OPERATOR: continue
@@ -427,6 +451,10 @@ def serialize (operators: list, operands: list):
 						operators.pop(o+i+offset)
 						operands.pop(o+i+offset)
 						offset-=1
+					elif instr == REMOVE_IF_EMPTY:
+						if operands[o+i+offset] is None:
+							operators.pop(o+i+offset)
+							operands.pop(o+i+offset)							
 					elif instr == LEFTSHIFT_OPERAND:
 						operators.pop(o+i+offset)
 						operands[o+i+offset-1]=operands.pop(o+i+offset)
@@ -434,22 +462,17 @@ def serialize (operators: list, operands: list):
 				olen+=offset
 			o+=1
 
-	operators.pop(0)
-	operands.pop(0)
-	operators.pop()
-	operands.pop()
+	if pop0:
+		operators.pop(0)
+		operands.pop(0)
+	if pop1:
+		operators.pop()
+		operands.pop()
 	olen-=2
 
 	#print(operators)
 	#print(operands)
 	#print()
-
-	o=0
-	while o<olen:
-		if not I.get(operators[o]):
-			raise Exception(f'Invalid "{operators[o]}" at {o}')
-		else: operators[o]=I[operators[o]]
-		o+=1
 
 	return operators, operands
 
@@ -500,7 +523,7 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 		aperator=abs(operator)
 		if o<2 and OPR[aperator]['form'] == NON: continue
 		
-		if operands[o] is None: operand=''
+		elif operands[o] is None or OPR[aperator]['form'] == NON: operand = ''
 
 		# Decimal number must have a decimal
 		elif OPR[aperator]['form'] == DEC:
@@ -513,12 +536,7 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 					if float(operand)<-1: operand = operand + '.0'
 					else: operand = '-0.' + operand[1:]
 
-		elif OPR[aperator]['form'] == NON:
-			operand = OPR[aperator]['$mid']
-			if aperator == I[';'] and deparse_set.get('newline'): operand+="\n"
-
-		else:
-			operand = str(operands[o])
+		else: operand = str(operands[o])
 
 		beg = OPR[aperator]['$beg']
 		end = OPR[aperator]['$end']
@@ -527,6 +545,8 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 			if OPRINV.get(end): end=OPRINV[end]
 			[beg, end] = [end, beg]
 
+		if operator == I[';'] and deparse_set.get('newline'): end="\n"
+		
 		# Append the deparsed expression
 		if deparse_set.get('html'):
 			mqry += '<var class="v' + str(operator) + '">' + html.escape(beg + operand + end) + '</var>'
@@ -536,7 +556,7 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 	if deparse_set.get('html'):
 		mqry = '<code class="meme">' + mqry + '</code>'
 
-	return mqry
+	return mqry.replace('[]', ']')
 
 
 #### MEMELANG-SQL CONVERSION ####
@@ -554,7 +574,8 @@ def querify(mqry: str, meme_table=None, name_table=None):
 		missings = [x for x in operands if isinstance(x, str)]
 		if missings: raise Exception("Unknown keys: " + ", ".join(missings))
 
-	queries = []
+	ctes = []
+	selects = []
 	params = []
 
 	o=1
@@ -564,17 +585,18 @@ def querify(mqry: str, meme_table=None, name_table=None):
 		slen=int(operands[o])
 		o+=1
 		if slen:
-			sql, param = subquerify(operators[o:o+slen], operands[o:o+slen], meme_table)
-			queries.append(sql)
+			cte, select, param = subquerify(operators[o:o+slen], operands[o:o+slen], meme_table, o*100)
+			ctes.extend(cte)
+			selects.extend(select)
 			params.extend(param)
 		o+=slen
 
-	return [' UNION '.join(queries), params]
-
+	#print('WITH ' + ', '.join(ctes) + ' ' + ' UNION '.join(selects))
+	return ['WITH ' + ', '.join(ctes) + ' ' + ' UNION '.join(selects), params]
 
 # Input: operators and operands for one Memelang command
 # Output: One SQL query string
-def subquerify(operators: list, operands: list, meme_table=None):
+def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	qry_set = {'all': False, 'of': False}
 	true_group = []
@@ -635,37 +657,36 @@ def subquerify(operators: list, operands: list, meme_table=None):
 	if qry_set.get(I['all']) and true_cnt == 0 and false_cnt == 0 and or_cnt == 0:
 		return [f"SELECT * FROM {meme_table}", []]
 
+	cte_cnt  = cte_beg
 	params   = []
 	cte_sqls = []
 	cte_outs = []
 	sql_outs = []
-	cte_cnt  = -1
 
 	# Process AND conditions
 	for suboperators, suboperands in true_group:
-		cte_cnt += 1
 		select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(suboperators, suboperands, meme_table)
 		wheres = [where_sql]
 		params.extend(qry_params)
-		if cte_cnt > 0: wheres.append(f"{select_sql[14:21]} IN (SELECT a0 FROM z{cte_cnt-1})")
+		if cte_cnt > cte_beg: wheres.append(f"{select_sql[14:21]} IN (SELECT a0 FROM z{cte_cnt})")
+		cte_cnt += 1
 		cte_sqls.append(f"z{cte_cnt} AS (SELECT {select_sql} {from_sql} WHERE {' AND '.join(wheres)})")
 		cte_outs.append((cte_cnt, qry_depth))
 
 	# Process OR groups
 	for or_group in or_groups.values():
-		cte_cnt += 1
 		max_depth = 0
 		or_selects = []
 		for suboperators, suboperands in or_group:
 			select_sql, from_sql, where_sql, qry_params, qry_depth = selectify(suboperators, suboperands, meme_table)
 			max_depth = max(max_depth, qry_depth)
 			
-			if cte_cnt > 0:
-				where_sql += f" AND m0.aid IN (SELECT a0 FROM z{cte_cnt-1})"
+			if cte_cnt > cte_beg: where_sql += f" AND m0.aid IN (SELECT a0 FROM z{cte_cnt})"
 			
 			or_selects.append(f"SELECT {select_sql} {from_sql} WHERE {where_sql}")
 			params.extend(qry_params)
 		
+		cte_cnt += 1
 		cte_sqls.append(f"z{cte_cnt} AS ({' UNION '.join(or_selects)})")
 		cte_outs.append((cte_cnt, max_depth))
 
@@ -695,9 +716,7 @@ def subquerify(operators: list, operands: list, meme_table=None):
 			sql_outs.append(f"SELECT {select_sql} {from_sql} WHERE {where_sql} AND m0.aid IN (SELECT a0 FROM z{cte_cnt})")
 			params.extend(qry_params)
 
-	for zmNum in cte_outs:
-		zNum, mNum = zmNum
-
+	for zNum, mNum in cte_outs:
 		cWhere='';
 		if zNum < cte_cnt: cWhere=f" WHERE a0 IN (SELECT a0 FROM z{cte_cnt})"
 
@@ -710,7 +729,8 @@ def subquerify(operators: list, operands: list, meme_table=None):
 	if qry_set.get(I['of']):
 		sql_outs.append(f"SELECT m0.val AS v0, m0.aid AS a0, '{I['of']}' AS c0, z.did AS r0, z.bid AS b0, z.wal AS w0, m0.vop AS o0, z.wop AS wo0 FROM {meme_table} m0 JOIN z{cte_cnt} AS z ON m0.aid = z.bid AND m0.cid = z.did WHERE m0.cid={I['is']}")
 
-	return ['WITH ' + ', '.join(cte_sqls) + ' ' + ' UNION '.join(sql_outs), params]
+	#return ['WITH ' + ', '.join(cte_sqls) + ' ' + ' UNION '.join(sql_outs), params]
+	return cte_sqls, sql_outs, params
 
 
 # Input: operators and operands for one Memelang statement

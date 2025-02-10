@@ -82,18 +82,54 @@ def tabledel():
 		os.system(command)
 
 
-def logitest():
-	operators, operands = memelang.parse('a]rz]bz=t;a]rx]bx=t;bx[rx]ry]by=t;bz[rz]rj]')
+def qrytest():
+	queries=[
+		'george_washington',
+		'george_washington]',
+		'george_washington[',
+		'george_washington[is',
+		'george_washington[is]',
+		'george_washington[]opt]',
+		'george_washington[is]opt]',
+		'george_washington]birth]',
+		'george_washington]birth]year]',
+		'george_washington]birth]year]adyear',
+		'george_washington]birth]]',
+		'george_washington[]birth]]',
+		'george_washington[is]birth]]',
+		']adyear',
+		']year]adyear',
+		']birth]year]adyear',
+		']adyear=1732',
+		']adyear>=1900',
+		']year]adyear>1800',
+		']birth]year]adyear<=2000',
+		']spouse]',
+		']spouse] ]child]',
+		']birth]year]adyear>=1800 ]birth]year]adyear<1900',
+		'[is]birth]year]adyear>=1800 ]birth]year]adyear<1900',
+		'george_washington; john_adams',
+		'george_washington;; john_adams',
+		'george_washington;; john_adams;',
+	]
 
-	print(operators, operands)
-	print()
-	memelang.sequence(operators, operands, 'expand')
+	for mqry in queries:
+		print('First Query:  ', mqry)
+		operators, operands = memelang.parse(mqry)
+		print('Operators:', operators)
+		print('Operands:', operands)
+		mqry2 = memelang.deparse(operators, operands)
+		print('Second Query: ', mqry2)
+		c1=memelang.count(mqry)
+		c2=memelang.count(mqry2)
+		print ('First Count:  ', c1)
+		print ('Second Count: ', c2)
 
-	print(operators, operands)
-	print()
+		if c1!=c2:
+			print()
+			print('*** ERROR C1!=C2 ABOVE ***')
 
-	memelang.logify(operators, operands)
-	print(memelang.deparse(operators, operands,{'newline':True}))
+		print()
 
 
 
@@ -137,6 +173,7 @@ if __name__ == "__main__":
 	elif sys.argv[1] == 'tableadd' or sys.argv[1] == 'addtable': tableadd()
 	elif sys.argv[1] == 'tabledel' or sys.argv[1] == 'deltable': tabledel()
 	elif sys.argv[1] == 'coreadd' or sys.argv[1] == 'addcore': putfile(LOCAL_DIR+'/core.meme')
+	elif sys.argv[1] == 'qrytest': qrytest()
 	elif sys.argv[1] == 'recore':
 		tabledel()
 		tableadd()
@@ -145,7 +182,5 @@ if __name__ == "__main__":
 		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
 		for file in files:
 			putfile(file)
-	elif sys.argv[1] == 'logitest':
-		logitest()
 	else:
 		sys.exit("MAIN.PY ERROR: Invalid command");
