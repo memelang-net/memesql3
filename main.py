@@ -24,9 +24,8 @@ def qry(mqry):
 	print(f"\nSQL: {full_sql}\n")
 
 	operators, operands = memelang.parse(mqry)
-	print ("MEME:")
-	print(operators)
-	print(operands)
+	print("Operators: ", [K[op] for op in operators])
+	print("Operands:  ", operands)
 	print (memelang.deparse(operators, operands)+"\n")
 
 	# Execute query
@@ -59,7 +58,7 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), aid BIGINT, cid BIGINT, did BIGINT, bid BIGINT, wal DECIMAL(20,6), vop SMALLINT, wop SMALLINT); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,did,bid); CREATE INDEX {DB_TABLE_MEME}_did_idx ON {DB_TABLE_MEME} (did); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), vop SMALLINT, aid BIGINT, cid BIGINT, did BIGINT, bid BIGINT, wop SMALLINT, wal DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,did,bid); CREATE INDEX {DB_TABLE_MEME}_did_idx ON {DB_TABLE_MEME} (did); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid,bid,str); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
@@ -116,10 +115,12 @@ def qrytest():
 	for mqry in queries:
 		print('First Query:  ', mqry)
 		operators, operands = memelang.parse(mqry)
-		print('Operators:', operators)
+		print('Operators:', [K[op] for op in operators])
 		print('Operands:', operands)
 		mqry2 = memelang.deparse(operators, operands)
 		print('Second Query: ', mqry2)
+		sql, params = memelang.querify(mqry, DB_TABLE_MEME, False)
+		print('SQL: ', memelang.morfigy(sql, params))
 		c1=memelang.count(mqry)
 		c2=memelang.count(mqry2)
 		print ('First Count:  ', c1)
@@ -145,17 +146,15 @@ def memeprint(operators, operands):
 		if operators[o]!=I[';']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
 		slen=int(operands[o])
 		o+=1
-
-		if slen and operators[o:o+W]==VACDB and operands[o+C] in (I['is'], 'is', I['of'], 'of'):
+		if slen==ROWLEN and operators[o:o+B+1]==VOACDB and operands[o+C] in (I['is'], 'is', I['of'], 'of'):
 				found = True
 				meme=list(map(str, operands[o:o+slen]))
 
-				if operators[o+W]==I['#']: bq=meme[B]
-				elif operators[o+W]==I['$']: bq='"'+meme[W]+'"'
+				if operators[o+W]==I['"']: bq='"'+meme[W]+'"'
 				elif operators[o+W]==I['.']: bq=meme[W].rstrip('0').rstrip('.')+' '+meme[B]
 				else: bq=OPR[operators[o+W]]['$beg']+' '+meme[W].rstrip('0').rstrip('.')+' '+meme[B]
 
-				print(f"| {meme[1][:23]:<23} | {meme[3][:23]:<23} | {bq[:23]:<23} |")
+				print(f"| {meme[A][:23]:<23} | {meme[D][:23]:<23} | {bq[:23]:<23} |")
 
 		o+=slen
 
