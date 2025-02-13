@@ -17,27 +17,27 @@ def sql(qry_sql):
 
 # Search for memes from a memelang query string
 def qry(mqry):
+	operators, operands = memelang.parse(mqry)
+	print ("QUERY:    ", memelang.deparse(operators, operands))
+	print("OPERATORS:", [K[op] for op in operators])
+	print("OPERANDS: ", operands)
+
 	sql, params = memelang.querify(mqry, DB_TABLE_MEME, False)
 	params = memelang.identify(params)
 	full_sql = memelang.morfigy(sql, params)
-
 	print(f"\nSQL: {full_sql}\n")
 
-	operators, operands = memelang.parse(mqry)
-	print("Operators: ", [K[op] for op in operators])
-	print("Operands:  ", operands)
-	print (memelang.deparse(operators, operands)+"\n")
-
 	# Execute query
-	memes = memelang.get(mqry+' qry.nam:key=1')
-	memeprint(memes[0], memes[2])
+	print(f"RESULTS:")
+	memes = memelang.get(mqry+' qry]nam]key')
+	memelang.out(memes[0], memes[2])
 
 
 # Read a meme file and save it
 def putfile(file_path):
 	operators, operands = memelang.read(file_path)
 	operators, operands = memelang.put(operators, operands)
-	memeprint(operators, operands)
+	memelang.out(operators, operands)
 
 
 #### DB ADMIN ####
@@ -111,6 +111,7 @@ def qrytest():
 		'george_washington;; john_adams',
 		'george_washington;; john_adams;',
 	]
+	errcnt=0
 
 	for mqry in queries:
 		print('First Query:  ', mqry)
@@ -126,41 +127,14 @@ def qrytest():
 		print ('First Count:  ', c1)
 		print ('Second Count: ', c2)
 
-		if c1!=c2:
+		if not c1 or c1!=c2:
 			print()
-			print('*** ERROR C1!=C2 ABOVE ***')
+			print('*** COUNT ERROR ABOVE ***')
+			errcnt+=1
 
 		print()
-
-
-
-def memeprint(operators, operands):
-	found = False
-
-	br = f"+{'-' * 25}+{'-' * 25}+{'-' * 25}+"
-	print(f"{br}\n| {'A':<23} | {'D':<23} | {'B=V':<23} |\n{br}")
-
-	o=1
-	olen=len(operators)
-	while o<olen:
-		if operators[o]!=I[';']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
-		slen=int(operands[o])
-		o+=1
-		if slen==ROWLEN and operators[o:o+B+1]==VOACDB and operands[o+C] in (I['is'], 'is', I['of'], 'of'):
-				found = True
-				meme=list(map(str, operands[o:o+slen]))
-
-				if operators[o+W]==I['"']: bq='"'+meme[W]+'"'
-				elif operators[o+W]==I['.']: bq=meme[W].rstrip('0').rstrip('.')+' '+meme[B]
-				else: bq=OPR[operators[o+W]]['$beg']+' '+meme[W].rstrip('0').rstrip('.')+' '+meme[B]
-
-				print(f"| {meme[A][:23]:<23} | {meme[D][:23]:<23} | {bq[:23]:<23} |")
-
-		o+=slen
-
-	if not found: print(f"| {'No matching memes':<76} |")
-
-	print(br)
+		print("ERRORS:", errcnt)
+		print()
 
 
 

@@ -9,21 +9,21 @@ from conf import *
 # encoding if/else logic in the later functions.
 
 # Column order
-V = 0
+V  = 0
 VO = 1
-A = 2
-C = 3
-D = 4
-B = 5
+A  = 2
+C  = 3
+D  = 4
+B  = 5
 WO = 6
-W = 7
-ROWLEN = 8
-ENDVAL = 0.5
+W  = 7
+MEMELEN = 8
+SEMILEN = 0.5
 
 ACDB     = [I['-:'], I['-]'], I[']'], I[':']]
 VOACDB   = [I['-.'], I['-==']] + ACDB
-VOACDBOW = VOACDB + [I['=='], I['.']]
-VOACDBOS = VOACDB + [I['=='], I['"']]
+MEMEROW  = VOACDB + [I['=='], I['.']]
+NAMEROW  = VOACDB + [I['=='], I['"']]
 
 # Forms
 NON    = 1.1		# Value has no form, like END
@@ -55,7 +55,7 @@ OPR = {
 	I['==']: {
 		'form' : AID,
 		'dcol' : 'wop',
-		'dval' : I['=t'],
+		'dval' : I['=T'],
 		'out'  : [AID],
 	},
 	I['"']: {
@@ -76,7 +76,7 @@ OPR = {
 		'dval' : None,
 		'out'  : [''],
 	},
-	I['++']: {
+	I['&&']: {
 		'form' : AID,
 		'dcol' : None,
 		'dval' : I['&'],
@@ -85,7 +85,7 @@ OPR = {
 	I[';']: {
 		'form' : NON,
 		'dcol' : None,
-		'dval' : ENDVAL,
+		'dval' : SEMILEN,
 		'out'  : [';'],
 	},
 	I['opr']: { # Actually starts operators, treat as close of non-existant prior statement
@@ -116,7 +116,7 @@ OPR = {
 	I['-==']: {
 		'form' : AID,
 		'dcol' : 'vop',
-		'dval' : I['=t'],
+		'dval' : I['=T'],
 		'out'  : [AID],
 	},
 	I['-.']: {
@@ -155,43 +155,42 @@ TOKOPR = {
 	"<=" : [I['=='], I['<=']],
 	"["  : [I['-]'], 'next'],
 	"]"  : [I[']'], 'next'],
-	";"  : [I[';'], ENDVAL],
-	' '  : [I['++'], I['&']],
+	";"  : [I[';'], SEMILEN],
+	' '  : [I['&&'], I['&']],
 }
 
-# For serialize()
-SERIAL = {
+# For resequence()
+SEQ = {
 	0 : { # V= and =W
 		(I['=='], I['?']) : ('keep', I['.']),
 		(I['-?'], I['-==']) : (I['-.'], 'keep'),
 	},
 	1 : { # First A
 		(I[';'], I['-?']) : ('keep', I['-:']),
-	},
-	2 : { # Turn last ]D into ]B
+		# Turn last ]D into ]B
 		(I[']'], I[';']) : (I[':'], 'keep'),
-		(I[']'], I['++']) : (I[':'], 'keep'),
+		(I[']'], I['&&']) : (I[':'], 'keep'),
 		(I[']'], I['==']) : (I[':'], 'keep'),
 	},
-	3 : { # Turn ] into ]]
+	2 : { # Turn ] into ]]
 		(I[']'], I[']']) : ('keep', I[']]']),
 		(I[']]'], I[']']) : ('keep', I[']]']),
 		(I['-]'], I['-]']) : (I['-]]'], 'keep'),
 		(I['-]'], I['-]]']) : (I['-]]'], 'keep'),
 	},
-	4 : { # Remove extras
+	3 : { # Remove extras
 		(I['-]'], I[']']) : ('removeEmpty', 'keep'),
 	},
-	5 : { # Expand and normalize to V=A[C]D]B=W
+	4 : { # Expand and normalize to V=A[C]D]B=W
 		(I['-:'], I[']'])          : ('keep', I['-]'], 'keep'),
 		(I[';'], I['-:'])          : ('keep', I['-=='], 'keep'),
 		(I[':'], I[';'])           : ('keep', I['=='], 'keep'),
 	},
-	6 : { # Expand and normalize to V=A[C]D]B=W
+	5 : { # Expand and normalize to V=A[C]D]B=W
 		(I[';'], I['-=='])          : ('keep', I['-.'], 'keep'),
 		(I['=='], I[';'])           : ('keep', I['.'], 'keep'),
 	},
-	7 : {
+	6 : { # Merge double semi-colon
 		(I[';'], I[';']) : ('kill', 'keep'),
 	}
 }
@@ -259,7 +258,7 @@ def selectin(cols: dict = {}, table: str = None):
 def parse(mqry: str):
 	tokens = tokenize(mqry)
 	operators, operands = operize(tokens)
-	serialize(operators, operands)
+	resequence(operators, operands)
 	return operators, operands
 
 
@@ -356,7 +355,9 @@ def operize(tokens: list):
 		elif '.' in operand: operator = I['.']
 
 		# String or Int ID
-		else: operator = I['?']
+		else:
+			operator = I['?']
+			if operand in ('f','t','g'): operand=I[operand]
 
 
 		if operator==I[';']:
@@ -383,15 +384,15 @@ def operize(tokens: list):
 # Input: operators, operands
 # Rationalizes operators and operands
 # Output: (mutates operators operands)
-def serialize(operators: list, operands: list, phases: list = [0,1,2,3,4]):
+def resequence(operators: list, operands: list, phases: list = [0,1,2,3]):
 	olen=len(operators)
 	for phase in phases:
 		o=0
 		while o<olen:
 			if operators[o]==I[';']: beg=o
-			if SERIAL[phase].get(tuple(operators[o:o+2])):
+			if SEQ[phase].get(tuple(operators[o:o+2])):
 				offset=0
-				instructions=SERIAL[phase].get(tuple(operators[o:o+2]))
+				instructions=SEQ[phase].get(tuple(operators[o:o+2]))
 
 				for i, instr in enumerate(instructions):
 					if i==1 and len(instructions)>2:
@@ -430,15 +431,21 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 		expression=''
 		for fld in OPR[operator]['out']:
 			if fld == DEC:
-				operand = str(operands[o])
-				if '.' not in operand: operand += '.0'
-				elif operand[0]=='.': operand = '0' + operand
-				elif operand[0,1].startswith('-.'): operand = '-0' + operand[1:]
+				sign = '-' if operands[o] < 0 else ''
+				ones = str(abs(operands[o]))
+				tenths = ''
+				if '.' in ones: ones, tenths = ones.split('.')
+				operand = sign + (ones.lstrip('0') or '0') + '.' + (tenths.rstrip('0') or '0')
+
 			elif fld == STR: operand = '' if operands[o] is None else operands[o]
-			elif fld == AID: operand = K[operands[o]]
+
+			elif fld == AID:
+				if isinstance(operands[o], int): operand = K[operands[o]]
+				else: operand = operands[o]
+
 			else: operand=fld
 
-			expression+=operand
+			expression+=str(operand)
 
 		if operator == I[';'] and deparse_set.get('newline'): expression+="\n"
 
@@ -448,7 +455,14 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 
 	if deparse_set.get('html'): mqry = '<code class="meme">' + mqry + '</code>'
 
+	# FIX LATER
+	mqry = mqry.replace('1.0=T', 't=').replace('=T1.0', '=t').replace(';;', ';')
+
 	return mqry
+
+def out (operators: list, operands: list):
+	print(deparse(operators, operands, {'newline': True}))
+
 
 
 #### MEMELANG-SQL CONVERSION ####
@@ -470,24 +484,20 @@ def querify(mqry: str, meme_table: str = None, name_table: str = None):
 	selects = []
 	params  = []
 
-	o=1
-	olen=len(operators)
-	while o<olen:
-		if operators[o]!=I[';']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
-		slen=int(operands[o])
-		o+=1
-		if slen:
-			cte, select, param = subquerify(operators[o:o+slen], operands[o:o+slen], meme_table, o*10)
-			ctes.extend(cte)
-			selects.extend(select)
-			params.extend(param)
-		o+=slen
+	end=1
+	while (end := nxt(operators, operands, (beg := end))):
+		beg+=1
+		if end-beg<1: continue
+		cte, select, param = subquerify(operators[beg:end], operands[beg:end], meme_table, len(ctes))
+		ctes.extend(cte)
+		selects.extend(select)
+		params.extend(param)
 
 	return ['WITH ' + ', '.join(ctes) + ' ' + ' UNION '.join(selects), params]
 
 # Input: operators and operands for one Memelang command
 # Output: One SQL query string
-def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1):
+def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg: int = 0):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	qry_set = {'all': False, 'of': False}
 	or_groups = {}
@@ -505,7 +515,7 @@ def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1)
 		if operators[o]==-I[':'] and operands[o]==I['qry']:
 			qry_set[operands[o+1]]=True
 			skip=True
-		elif operators[o]==I['++']:
+		elif operators[o]==I['&&']:
 			if not skip: markers.append([beg, o])
 			skip=False
 			beg=o
@@ -518,13 +528,13 @@ def subquerify(operators: list, operands: list, meme_table=None, cte_beg:int=-1)
 			operand=operands[o]
 			if operator == I['==']: 
 				# Handle =f (false)
-				if operand == I['=f']:
+				if operand == I['=F']:
 					false_cnt += 1
 					false_group.append([operators[beg:end], operands[beg:end]])
 					found=True
 					break
 				# Handle =g (get)
-				if operand == I['=g']:
+				if operand == I['=G']:
 					get_group.append([operators[beg:end], operands[beg:end]])
 					found=True
 					break
@@ -752,8 +762,7 @@ def namify(operands: list, bids: list, name_table: str = None):
 	missings=[]
 
 	output = {}
-	for bid in bids:
-		output[bid]=[bid]
+	for bid in bids: output[bid]=[bid]
 
 	matches = []
 	for i,operand in enumerate(operands):
@@ -773,13 +782,19 @@ def namify(operands: list, bids: list, name_table: str = None):
 				oprabs=abs(operand)
 				if namemap.get(oprabs) and namemap[oprabs].get(bid): output[bid].append(('-' if operand<0 else '') + namemap[oprabs][bid])
 				else: output[bid].append(False)
-			else:
-				output[bid].append(operand)
+			else: output[bid].append(operand)
 
 	return list(output.values())
 
 
 #### PROCESS MEMELANG QUERY FOR SQL QUERY ####
+
+def nxt(operators: list, operands: list, beg: int = 1):
+	olen=len(operators)
+	if beg>=olen: return False
+	elif operators[beg]!=I[';']: raise Exception(f'Operator counting error at {beg} for {operators[beg]}')
+	return beg+1+int(operands[beg])
+
 
 # Input a Memelang query string
 # Replace keys with aids
@@ -794,19 +809,16 @@ def get(mqry: str, meme_table: str = None, name_table: str = None):
 	memes = select(sql, params)
 
 	for meme in memes:
-		output[0].extend([I[';']] + VOACDBOW)
-		output[1].extend([ENDVAL+8] + meme)
+		output[0].extend([I[';']] + MEMEROW)
+		output[1].extend([SEMILEN+MEMELEN] + meme)
 
 	if namekeys: output.extend(namify(output[1], namekeys, name_table))
 
 	return output
 
-
 # Return meme count of above results
 def count(mqry: str, meme_table: str = None, name_table: str = None):
-	if not meme_table: meme_table=DB_TABLE_MEME
-	if not name_table: name_table=DB_TABLE_NAME
-	sql, params = querify(mqry, meme_table)
+	sql, params = querify(mqry, meme_table, name_table)
 	return len(select(sql, params))
 
 
@@ -819,40 +831,37 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 	aidcache(operands)
 
 	# Normalize memes
-	serialize(operators, operands, [5,6,7])
+	resequence(operators, operands, [4,5,6])
 
 	missings = {}
 	sqls = {meme_table:[], name_table:[]}
 	params = {meme_table:[], name_table:[]}
 
-	# Swap in ID or mark missing
+	# Swap keys with IDs or mark key missing
 	o=2
 	olen=len(operators)
 	while o<olen:
 		if OPR[abs(operators[o])]['form']==AID:
 			if isinstance(operands[o], int): pass
-			elif operands[o].isdigit(): operands[o]=int(operands[o])
+			elif str(operands[o]).isdigit(): operands[o]=int(operands[o])
 			elif I.get(operands[o]): operands[o]=I[operands[o]]
 			else: missings[operands[o]]=1
 		o+=1
 
-	# Pull out keys
-	o=1
-	while o<olen:
-		if operators[o]!=I[';']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
-		slen=int(operands[o])
-		o+=1
-		if slen==ROWLEN and operators[o:o+slen]==VOACDBOS and operands[o+D]==I['nam'] and operands[o+B]==I['key']:
-			key = operands[o+W]
-			aid = operands[o+A]
+	# Mark id-key for writing from id]nam]key="xyz"
+	end=1
+	while (end := nxt(operators, operands, (beg := end))):
+		beg+=1
+		if end-beg==MEMELEN and operators[beg:end]==NAMEROW and operands[beg+D]==I['nam'] and operands[beg+B]==I['key']:
+			key = operands[beg+W]
+			aid = operands[beg+A]
 			missings.pop(key, None)
 			sqls[name_table].append("(%s,%s,%s)")
 			params[name_table].extend([aid, I['key'], key])
 			I[key]=aid
 			K[aid]=key
-		o+=slen
 
-	# Missing keys with no associated ID
+	# Select new ID for missing keys with no associated ID
 	if missings:
 		aid = maxnum('aid', name_table) or I['cor']
 		for key, val in missings.items():
@@ -862,33 +871,29 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 			I[key]=aid
 			K[aid]=key
 
-	# Swap in new IDs
+	# Swap missing keys for new IDs
 	o=2
 	while o<olen:
 		if OPR[abs(operators[o])]['form']==AID and isinstance(operands[o], str): operands[o]=I[operands[o]]
 		o+=1
 
-	# Pull out names and truths
-	o=1
-	while o<olen:
-		if operators[o]!=I[';']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
-		slen=int(operands[o])
-		o+=1
-
-		if slen==ROWLEN and operators[o:o+slen-2]==VOACDB:
+	# Pull out non-key names and truths
+	end=1
+	while (end := nxt(operators, operands, (beg := end))):
+		beg+=1
+		if end-beg==MEMELEN and operators[beg:end-2]==VOACDB:
 
 			# String name
-			if operators[o+W]==I['"']:
-				if operands[o+B]!=I['key']:
-					params[name_table].extend([operands[o+A], operands[o+B], operands[o+W]])
+			if operators[beg+W]==I['"']:
+				if operands[beg+B]!=I['key']:
+					params[name_table].extend([operands[beg+A], operands[beg+B], operands[beg+W]])
 					sqls[name_table].append('(%s,%s,%s)')
 
 			# True/False/Float V=A[C]D]B=W
 			else:
-				params[meme_table].extend(operands[o:o+slen])
+				params[meme_table].extend(operands[beg:end])
 				sqls[meme_table].append('(%s,%s,%s,%s,%s,%s,%s,%s)')
-
-		o+=slen
+		#else: print('skip', operators[beg:end-2], VOACDB, operators[beg:end], operands[beg:end])
 
 	for tbl in params:
 		if params[tbl]:
@@ -899,15 +904,16 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 
 # Remove name statement from query
 def dename(mqry: str):
-	terms = re.split(r'\s+', mqry)
+	terms = re.split(r'[\s\;]+', mqry)
 	remaining_terms = []
 
-	pattern = re.compile(r'^([a-z0-9_]+)?\.(nam)(?:\:([a-z0-9_]+))?(?:=([0-9]+))?$')
+	pattern = re.compile(r'^qry\]nam\]([a-z]+)')
 	extracted_terms = []
 	for term in terms:
 		m = pattern.match(term)
-		if m: extracted_terms.append(m.groups()[2])
-		else: remaining_terms.append(term)
+		if m: extracted_terms.append(m.group(1))
+		elif term: remaining_terms.append(term)
+
 
 	# Reconstruct the remaining string
 	return ' '.join(remaining_terms), identify(list(set(extracted_terms)))
@@ -918,30 +924,22 @@ def logify (operators: list, operands: list):
 	ACs = {}
 
 	# Pull out A[C]D]B logic rules
-	o=1
-	olen=len(operators)
-	while o<olen:
-		if operators[o]!=I[';']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
-		slen=int(operands[o])
-		o+=1
-		if slen==8 and operators[o:o+slen-2]==VOACDB and operands[o+C]!=I['is']:
-			if not ACs.get(operands[o+A]): ACs[operands[o+A]]={}
-			if not ACs[operands[o+A]].get(operands[o+C]): ACs[operands[o+A]][operands[o+C]]=[]
-			ACs[operands[o+A]][operands[o+C]].append(o)
-		o+=slen
+	end=1
+	while (end := nxt(operators, operands, (beg := end))):
+		beg+=1
+		if end-beg==MEMELEN+1 and operators[beg:end-2]==VOACDB and operands[beg+C]!=I['is']:
+			if not ACs.get(operands[beg+A]): ACs[operands[beg+A]]={}
+			if not ACs[operands[beg+A]].get(operands[beg+C]): ACs[operands[beg+A]][operands[beg+C]]=[]
+			ACs[operands[beg+A]][operands[beg+C]].append(beg)
 
 	# Apply A[C]D]B=t rules to C for X]C]A => X]D]B=t
-	o=1
-	while o<olen:
-		if operators[o]!=I[';']: raise Exception(f'Operator counting error at {o} for {operators[o]}')
-		slen=int(operands[o])
-		o+=1
-		if slen and operators[o:o+slen-2] == VOACDB and operands[o+C]==I['is'] and ACs.get(operands[o+B]) and ACs[operands[o+B]].get(operands[o+D]):
-			for lobeg in ACs[operands[o+B]][operands[o+D]]:
+	end=1
+	while (end := nxt(operators, operands, (beg := end))):
+		beg+=1
+		if slen and operators[beg:end-2] == VOACDB and operands[beg+C]==I['is'] and ACs.get(operands[beg+B]) and ACs[operands[beg+B]].get(operands[beg+D]):
+			for lobeg in ACs[operands[beg+B]][operands[beg+D]]:
 				operators.extend([I[';']] + VOACDB)
-				operands.extend([ENDVAL+8, I['t'], I['=t'], operands[o+A], I['of'], operands[lobeg+D], operands[lobeg+B], operands[lobeg+WO], operands[lobeg+W]])
-				olen+=7
-		o+=slen
+				operands.extend([SEMILEN+MEMELEN, I['t'], I['=T'], operands[beg+A], I['of'], operands[lobeg+D], operands[lobeg+B], operands[lobeg+WO], operands[lobeg+W]])
 
 
 #### MEME FILE ####
