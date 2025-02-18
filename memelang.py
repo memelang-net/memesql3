@@ -579,8 +579,9 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 		"m0.val::text || '{' || m0.vop::text || '}' || m0.aid::text || '[' || m0.cid::text"
 	]
 	joins = [f"FROM {meme_table} m0"]
-	m = -1
+	m = 0
 	wop='='
+	prev_right = None
 
 	for i, operator in enumerate(operators):
 		operand = operands[i]
@@ -595,7 +596,7 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 			continue
 
 		elif operator == I['[']:
-			m+=1
+			if prev_right: m+=1
 
 			# FIX LATER
 			if operand in (I['is'], -I['is']): dcol='cid'

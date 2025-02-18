@@ -43,14 +43,14 @@ Installation on Ubuntu:
 
 Execute a query:
 
-	# python3 ./main.py get "john_adams]spouse]"
+	# python3 ./main.py get "john_adams[spouse"
 
 Outputs:
 
-	SQL: SELECT * FROM meme m0 WHERE m0.aid='john_adams' AND m0.did='spouse' AND m0.wal!=0
-	
-	+---------------------+---------------------+---------------------+------------+
-	| A                   | R                   | B                   |          Q |
-	+---------------------+---------------------+---------------------+------------+
-	| john_adams          | spouse              | abigail_adams       |          1 |
-	+---------------------+---------------------+---------------------+------------+
+	QUERY:     john_adams[spouse;
+	OPERATORS: ['opr', ';', '-]', '[', ';']
+	OPERANDS:  [210, 2.5, 'john_adams', 'spouse', 0.5]
+	SQL: WITH z1 AS (SELECT m0.aid AS a0, ... AS acdb FROM meme m0 WHERE m0.aid=1000025 AND m0.did=1000023) SELECT acdb FROM z1
+
+	RESULTS:
+	t=john_adams[is[spouse]abigail_adams=t;
