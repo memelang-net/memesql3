@@ -25,7 +25,7 @@ def qry(mqry):
 	sql, params = memelang.querify(mqry, DB_TABLE_MEME, False)
 	params = memelang.identify(params)
 	full_sql = memelang.morfigy(sql, params)
-	print(f"\nSQL: {full_sql}\n")
+	print(f"SQL: {full_sql}\n")
 
 	# Execute query
 	print(f"RESULTS:")
@@ -87,26 +87,29 @@ def qrytest():
 		'george_washington]',
 		'george_washington[',
 		'george_washington[is',
-		'george_washington[is]',
-		'george_washington[]opt]',
-		'george_washington[is]opt]',
-		'george_washington]birth]',
-		'george_washington]birth]year]',
-		'george_washington]birth]year]adyear',
-		'george_washington]birth]]',
-		'george_washington[]birth]]',
-		'george_washington[is]birth]]',
+		'george_washington[is[',
+		'george_washington[is[]',
+		'george_washington[[opt]',
+		'george_washington[is[opt]',
+		'george_washington[birth',
+		'george_washington[birth]',
+		'george_washington[birth[year',
+		'george_washington[birth[year]',
+		'george_washington[birth[year]adyear',
+		'george_washington[birth[[',
+		'george_washington[is[birth[[',
 		']adyear',
-		']year]adyear',
-		']birth]year]adyear',
+		'[year]adyear',
+		'[birth[year]adyear',
 		']adyear=1732',
 		']adyear>=1900',
-		']year]adyear>1800',
-		']birth]year]adyear<=2000',
-		']spouse]',
-		']spouse] ]child]',
-		']birth]year]adyear>=1800 ]birth]year]adyear<1900',
-		'[is]birth]year]adyear>=1800 ]birth]year]adyear<1900',
+		'[year]adyear>1800',
+		'[birth[year]adyear<=2000',
+		'[spouse]',
+		'[spouse] [child]',
+		'[birth[year]adyear>=1800 [birth[year]adyear<1900',
+		'[is[birth[year]adyear>=1800 [birth[year]adyear<1900',
+		'[spouse [child [birth[year]adyear<1900',
 		'george_washington; john_adams',
 		'george_washington;; john_adams',
 		'george_washington;; john_adams;',
@@ -133,8 +136,8 @@ def qrytest():
 			errcnt+=1
 
 		print()
-		print("ERRORS:", errcnt)
-		print()
+	print("ERRORS:", errcnt)
+	print()
 
 
 
