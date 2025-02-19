@@ -6,7 +6,7 @@ These Python scripts receive [Memelang v3](https://memelang.net/03/) queries, co
 ## Files
 
 * *conf.py* database configurations
-* *core.meme* core memelang id-keys to be loaded into the DB
+* *core.meme* core memelang id-keys to be loaded into the database
 * *main.py* CLI interface for queries and testing
 * *memelang.py* library to parse Memelang queries and execute in Postgres
 * *presidents.meme* example Memelang data for the U.S. presidents

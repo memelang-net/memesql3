@@ -505,9 +505,9 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 	# If qry_set['all'] and no true/false/or conditions
 	if qry_set.get(I['all']) and false_cnt == 0 and or_cnt == 0:
 		select_sql, from_sql, where_sql, qry_params = selectify([], [], meme_table)
-		return [f"SELECT select_sql FROM {meme_table}", []]
+		return [f"SELECT {select_sql} FROM {meme_table}", []]
 
-	cte_cnt  = cte_beg
+	z  = cte_beg
 	params   = []
 	cte_sqls = []
 	sel_sqls = []
@@ -530,39 +530,39 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 			select_sql, from_sql, where_sql, qry_params = selectify(suboperators, suboperands, meme_table)
 
 			or_sql = f"SELECT {select_sql} {from_sql} WHERE {where_sql}"
-			if cte_cnt==cte_beg:
+			if z==cte_beg:
 				# FIX LATER
 				if notwheres: 
 					or_sql+=' AND ' + ' AND '.join(notwheres)
 					qry_params.extend(notparams)
 					notwheres=[]
 
-			else: or_sql+=f" AND m0.aid IN (SELECT a0 FROM z{cte_cnt})"
+			else: or_sql+=f" AND m0.aid IN (SELECT a0 FROM z{z})"
 
 			or_selects.append(or_sql)
 			params.extend(qry_params)
-		cte_cnt += 1
-		cte_sqls.append(f"z{cte_cnt} AS ({' UNION '.join(or_selects)})")
+		z += 1
+		cte_sqls.append(f"z{z} AS ({' UNION '.join(or_selects)})")
 
 	# select all data related to the matching As
 	if qry_set.get(I['all']):
 		select_sql, from_sql, where_sql, qry_params = selectify([I['[']], [], meme_table)
-		sel_sqls.append(f"SELECT {select_sql} {from_sql} WHERE m0.aid IN (SELECT a0 FROM z{cte_cnt})")
+		sel_sqls.append(f"SELECT {select_sql} {from_sql} WHERE m0.aid IN (SELECT a0 FROM z{z})")
 
 	# get groups
 	else:
 		for suboperators, suboperands in groups['get'][0]:
 			select_sql, from_sql, where_sql, qry_params = selectify(suboperators, suboperands, meme_table)
-			sel_sqls.append(f"SELECT {select_sql} {from_sql} WHERE {where_sql} AND a0 IN (SELECT a0 FROM z{cte_cnt})")
+			sel_sqls.append(f"SELECT {select_sql} {from_sql} WHERE {where_sql} AND a0 IN (SELECT a0 FROM z{z})")
 			params.extend(qry_params)
 
-	for cte_out in range(cte_beg, cte_cnt):
-		sel_sqls.append(f"SELECT acdb FROM z{cte_out+1}" + ('' if cte_out+1 == cte_cnt else f" WHERE a0 IN (SELECT a0 FROM z{cte_cnt})"))
+	for cte_out in range(cte_beg, z):
+		sel_sqls.append(f"SELECT a0, acdb FROM z{cte_out+1}" + ('' if cte_out+1 == z else f" WHERE a0 IN (SELECT a0 FROM z{z})"))
 
 	# FIX LATER
 	# Apply logic to As
-	#if qry_set.get(I['of']):
-	#	sel_sqls.append(f"SELECT m0.val AS v0, m0.vop AS o0, m0.aid AS a0, '{I['of']}' AS c0, z.did AS r0, z.bid AS b0, z.wop AS wo0, z.wal AS w0 FROM {meme_table} m0 JOIN z{cte_cnt} AS z ON m0.aid = z.bid AND m0.cid = z.did WHERE m0.cid={I['is']}")
+	if qry_set.get(I['of']):
+		sel_sqls.append(f"SELECT m0.aid, 't=' || m0.aid::text || '[{I['of']}[' || z{z}.did::text || ']' || z{z}.bid::text || '{{' || z{z}.wop::text || '}}' || z{z}.wal::text as acdb FROM {meme_table} m0 JOIN z{z} ON m0.aid = z{z}.bid AND m0.cid*-1 = z{z}.did WHERE m0.cid={I['is']}")
 
 	return cte_sqls, sel_sqls, params
 
@@ -573,15 +573,21 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	if not meme_table: meme_table=DB_TABLE_MEME
 
 	params = []
-	wheres = []
-	selects = [
-		"m0.aid AS a0",
-		"m0.val::text || '{' || m0.vop::text || '}' || m0.aid::text || '[' || m0.cid::text"
-	]
-	joins = [f"FROM {meme_table} m0"]
+
+	qparts = {
+		'select': [
+			"(A0) AS a0",
+			"m0.val::text || '{' || m0.vop::text || '}' || (A0)::text || '[' || m0.cid::text || '[' || (R0)::text || ']' || (B0)::text"
+		],
+		'join': [f"FROM {meme_table} m0"],
+		'where': []
+	}
+
+	inversions = [False]
+
 	m = 0
 	wop='='
-	prev_right = None
+	prev_opr = None
 
 	for i, operator in enumerate(operators):
 		operand = operands[i]
@@ -591,34 +597,27 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 		if operator in (I['-=='], I['-.']):
 			raise Exception(f'Operator {K[operator]} is not supported yet')
 
-		elif dcol=='wop': 
+		# New row
+		elif (operator == I[']'] and prev_opr==I[']']) or (operator == I['['] and prev_opr in (I['['], I[']'])):
+			m+=1
+			qparts['select'][1]+=f" || '[' || (R{m})::text || ']' || (B{m})::text"
+			qparts['join'].append(f"JOIN {meme_table} m{m} ON (B{m-1})=(A{m})")
+			inversions.append(False)
+
+		# Inversion
+		if operator == I['[']:
+			if operand is not None and operand<0:
+				inversions[m]=True
+				operand*=-1
+
+		elif operator == I[']']: dcol=f"(B{m})"
+		elif operator == I['-]']: dcol=f"(A{m})"
+		elif operator == I['==']:
 			wop=K[int(operand)]
 			continue
+		elif dcol: dcol = f"m{m}.{dcol}"
 
-		elif operator == I['[']:
-			if prev_right: m+=1
-
-			# FIX LATER
-			if operand in (I['is'], -I['is']): dcol='cid'
-
-			else:
-				if operand is not None and operand<0:
-					operand*=-1
-					left=f"m{m}.bid"
-					did=f"(m{m}.did*-1)"
-					right=f"m{m}.aid"
-					if m==0:
-						selects[0]=selects[0].replace('m0.aid', 'm0.bid')
-						selects[1]=selects[1].replace('m0.aid', 'm0.bid')
-				else:
-					left=f"m{m}.aid"
-					did=f"m{m}.did"
-					right=f"m{m}.bid"
-
-				if m>0: joins.append(f"JOIN {meme_table} m{m} ON {prev_right}={left}")
-				selects[1] += f" || '[' || {did}::text || ']' || {right}::text"
-				prev_right = right
-
+		prev_opr = operator
 		
 		if dcol and operand is not None:
 			if form in (INT, AID): operand=int(operand)
@@ -627,17 +626,23 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 
 			eql = wop if dcol=='wal' else '='
 
-			wheres.append(f'm{m}.{dcol}{eql}%s')
+			qparts['where'].append(f"{dcol}{eql}%s")
 			params.append(operand)
 
 
-	if aidOnly: selects.pop(1)
-	else: selects[1] += f" || '{{' || m{m}.wop::text || '}}' || m{m}.wal::text AS acdb"
+	if aidOnly: qparts['select'].pop(1)
+	else: qparts['select'][1] += f" || '{{' || m{m}.wop::text || '}}' || m{m}.wal::text AS acdb"
+
+	for i,inv in enumerate(inversions):
+		for qpart in qparts:
+			for p, _ in enumerate(qparts[qpart]):
+				if inv: qparts[qpart][p]=qparts[qpart][p].replace(f"(A{i})", f"m{i}.bid").replace(f"(B{i})", f"m{i}.aid").replace(f"(R{i})", f"(m{i}.did*-1)")
+				else: qparts[qpart][p]=qparts[qpart][p].replace(f"(A{i})", f"m{i}.aid").replace(f"(B{i})", f"m{i}.bid").replace(f"(R{i})", f"m{i}.did")
 		
 	return [
-		', '.join(selects),
-		' '.join(joins),
-		' AND '.join(wheres),
+		', '.join(qparts['select']),
+		' '.join(qparts['join']),
+		' AND '.join(qparts['where']),
 		params
 	]
 
@@ -744,7 +749,7 @@ def get(mqry: str, meme_table: str = None, name_table: str = None):
 	memes = select(sql, params)
 
 	mres=''
-	for meme in memes: mres+=meme[0]+';'
+	for meme in memes: mres+=meme[1]+';'
 	output[0], output[1] = parse(mres)
 
 	if namekeys: output.extend(namify(output[1], namekeys, name_table))
@@ -860,6 +865,7 @@ def dename(mqry: str):
 	return ' '.join(remaining_terms), identify(list(set(extracted_terms)))
 
 
+# FIX LATER
 # Apply logic
 def logify (operators: list, operands: list):
 	ACs = {}
@@ -871,7 +877,7 @@ def logify (operators: list, operands: list):
 		if end-beg==MEMELEN+1 and operators[beg:end-2]==VOACDB and operands[beg+C]!=I['is']:
 			if not ACs.get(operands[beg+A]): ACs[operands[beg+A]]={}
 			if not ACs[operands[beg+A]].get(operands[beg+C]): ACs[operands[beg+A]][operands[beg+C]]=[]
-			ACs[operands[beg+A]][operands[beg+C]].append(beg)
+			ACs[operands[beg+A]][operands[beg+C]*-1].append(beg)
 
 	# Apply A[-C]X[D]B=t rules to X for X[C]A => X[D]B=t
 	end=1
