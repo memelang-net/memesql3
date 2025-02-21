@@ -9,23 +9,20 @@ from conf import *
 # encoding if/else logic in the later functions.
 
 # Column order
-V  = 0
-VO = 1
-A  = 2
-C  = 3
-D  = 4
-B  = 5
-WO = 6
-W  = 7
-MEMELEN = 8
-SEMILEN = 0.5
+A  = 0
+R  = 1
+B  = 2
+E  = 3
+Q  = 4
+ARB       = [I['@'], I['['], I[']']]
+ARBE      = ARB + [I['==']]
+ARBEQ     = ARBE + [I['.']]
+ARBES     = ARBE + [I['"']]
+MEMELEN   = 5
+SEMILEN   = 0.5
 
-#          AID       CID     DID     BID
-ACDB     = [I['-]'], I['['], I['['], I[']']]
+LOGI       = [I['@'], I['['], I[']'], I['['], I[']']]
 
-VOACDB   = [I['-.'], I['-==']] + ACDB
-MEMEROW  = VOACDB + [I['=='], I['.']]
-NAMEROW  = VOACDB + [I['=='], I['"']]
 
 # Forms
 NON    = 1.1		# Value has no form, like END
@@ -36,78 +33,75 @@ STR    = 1.5		# Value is a string
 
 # Each operator and its meaning
 OPR = {
+	I['@']: {
+		'form' : AID,
+		'dcol' : 'aid',
+		'icol' : 'bid',
+		'dval' : None,
+		'out'  : [STR]
+	},
 	I[']']: {
 		'form' : AID,
 		'dcol' : 'bid',
+		'icol' : 'aid',
 		'dval' : None,
 		'out'  : [']', STR]
 	},
 	I['[']: {
 		'form' : AID,
-		'dcol' : 'did',
-		'dval' : I['is'],
+		'dcol' : 'rid',
+		'icol' : 'rid*-1',
+		'dval' : None,
 		'out'  : ['[', STR],
 	},
 	I['==']: {
 		'form' : AID,
-		'dcol' : 'wop',
+		'dcol' : 'eql',
+		'icol' : 'eql',
 		'dval' : I['#='],
 		'out'  : [AID],
+	},
+	I['.']: {
+		'form' : DEC,
+		'dcol' : 'qnt',
+		'icol' : 'qnt',
+		'dval' : I['t'],
+		'out'  : [DEC],
 	},
 	I['"']: {
 		'form' : STR,
 		'dcol' : 'str',
+		'icol' : 'str',
 		'dval' : None,
 		'out'  : ['"', STR, '"'],
-	},
-	I['.']: {
-		'form' : DEC,
-		'dcol' : 'wal',
-		'dval' : I['t'],
-		'out'  : [DEC],
 	},
 	I['||']: {
 		'form' : INT,
 		'dcol' : None,
+		'icol' : None,
 		'dval' : None,
 		'out'  : [''],
 	},
 	I['&&']: {
 		'form' : AID,
 		'dcol' : None,
+		'icol' : None,
 		'dval' : I['&'],
 		'out'  : [' '],
 	},
 	I[';']: {
 		'form' : NON,
 		'dcol' : None,
+		'icol' : None,
 		'dval' : SEMILEN,
 		'out'  : [';'],
 	},
 	I['opr']: { # Actually starts operators, treat as close of non-existant prior statement
 		'form' : NON,
 		'dcol' : None,
+		'icol' : None,
 		'dval' : I['mix'],
 		'out'  : [''],
-	},
-
-	I['-]']: {
-		'form' : AID,
-		'dcol' : 'aid',
-		'dval' : None,
-		'out'  : [STR],
-	},
-	I['-==']: {
-		'form' : AID,
-		'dcol' : 'vop',
-		'dval' : I['#='],
-		'out'  : [AID],
-	},
-	I['-.']: {
-		'form' : DEC,
-		'dcol' : 'val',
-		'dval' : I['t'],
-		'out'  : [DEC],
 	},
 }
 
@@ -116,46 +110,19 @@ INCOMPLETE = 1
 INTERMEDIATE = 2
 COMPLETE = 3
 STRTOK = {
-	"!"  : [INCOMPLETE, None, None],
-	"{"  : [INCOMPLETE, None, None],
-	"#"  : [INCOMPLETE, None, None],
+	"!"  : [INCOMPLETE, False, False],
+	"{"  : [INCOMPLETE, False, False],
+	"#"  : [INCOMPLETE, False, False],
 	">"  : [INTERMEDIATE, I['=='], I['>']],
 	"<"  : [INTERMEDIATE,I['=='], I['<']],
 	"="  : [COMPLETE, I['=='], I['=']],
 	"!=" : [COMPLETE, I['=='], I['!=']],
-	"#=" : [COMPLETE, I['=='], I['#=']],
 	">=" : [COMPLETE, I['=='], I['>=']],
 	"<=" : [COMPLETE, I['=='], I['<=']],
-	"["  : [COMPLETE, I['['], 'next'],
-	"]"  : [COMPLETE, I[']'], 'next'],
+	"["  : [COMPLETE, I['['], None],
+	"]"  : [COMPLETE, I[']'], None],
 	";"  : [COMPLETE, I[';'], SEMILEN],
 	' '  : [COMPLETE, I['&&'], I['&']]
-}
-
-
-# For resequence()
-SEQ = {
-	0 : { # Determine equalities
-		(I['=='], I['?']) : ('keep', I['.']),
-		(I['-?'], I['-==']) : (I['-.'], 'keep'),
-		(I['-=='], I['-?']) : ('keep', I['-]']),
-		(I[';'], I['-?']) : ('keep', I['-]']),
-	},
-	1 : { # Remove unnecessary operators
-		(I[';'], I['-]']) : ['keep','empty'],
-		(I['=='], I['-]']) : ['keep','empty'],
-		(I['['], I[']']) : ['keep','empty'],
-		(I['-]'], I[']']) : ['keep','empty'],
-		(I[';'], I[';']) 	: ('kill', 'keep'),
-	},
-	2 : { # Expand and normalize to V=A[C]D]B=W
-		#(I['['], I['['])    : ('insert', I[']']),
-		(I[';'], I['-]'])   : ('insert', I['-.'], I['-==']),
-		(I[']'], I[';'])    : ('insert', I['=='], I['.']),
-	},
-	3 : { # Add [is
-		(I['-]'], I['['], I[']'], I['=='])    : ('insert', I['[']),
-	}
 }
 
 
@@ -218,9 +185,8 @@ def selectin(cols: dict = {}, table: str = None):
 
 # Input: Memelang string operator1operand1operator2operand2
 # Output: [operator1, operator2, ...], [operand1, operand2, ...]
-def parse(mqry: str):
+def decode(mqry: str):
 	operators, operands  = operate(mqry)
-	resequence(operators, operands)
 	return operators, operands
 
 
@@ -239,6 +205,9 @@ def operate(mqry: str):
 	# Prepend zero before decimals, such as =.5 to =0.5
 	mqry = re.sub(r'([<>=])(\-?)\.([0-9])', lambda m: f"{m.group(1)}{m.group(2)}0.{m.group(3)}", mqry)
 
+	# Append semicolon
+	mqry+=';'
+
 	mqry_len = len(mqry)
 	if mqry_len == 0: raise Exception("Error: Empty query provided.")
 
@@ -246,7 +215,6 @@ def operate(mqry: str):
 	operands = [I['mix'],SEMILEN]
 	onext = False
 	beg=1
-	side=-1
 
 	i = 0
 	while i < mqry_len:
@@ -284,20 +252,17 @@ def operate(mqry: str):
 
 			completeness, operator, operand = STRTOK[token]
 
-			if operand=='next':
-				onext=True
-				operand=None
-				side=1
-			else: 
-				onext=False
-
 			if operator==I[';']:
+				# Skip double semicolons ;;
+				if operators[-1]==I[';']:
+					i += 1
+					continue
 				beg=len(operators)
-				side=-1
-			else:
-				operands[beg]+=1
-				operator*=side
-			
+			else: operands[beg]+=1
+
+			# Prior operator is starting A without prefix
+			if operator in (I[']'],I['['],I[';']) and operators[-1]==I['?'] and operators[-2]==I[';']: operators[-1]=I['@']
+
 			operators.append(operator)
 			operands.append(operand)
 			i += 1
@@ -305,79 +270,33 @@ def operate(mqry: str):
 		# key/int/float token
 		else:
 			m = re.match(r'[a-z0-9\_\.\-]+', mqry[i:])
-			if not m: raise Exception(f"Memelang parse error: Unexpected '{mqry[i]}' at char {i} in {mqry}")
+			if not m: raise Exception(f"Memelang decode error: Unexpected '{mqry[i]}' at char {i} in {mqry}")
 
 			# format
 			operand = m.group()
-			if operand in ('f','t','g'):            operand=I[operand]
-			elif '.' in operand:                    operand=float(operand)
-			elif re.match(r'^-?[0-9]+$', operand):  operand=int(operand)
+			if operand in ('f','t','g'): operand=I[operand]
+			elif '.' in operand or operators[-1]==I['==']: operand=float(operand)
+			elif re.match(r'^-?[0-9]+$', operand): operand=int(operand)
 
-			if onext: operands[-1]=operand
+			if operators[-1] in (I[']'],I['[']): operands[-1]=operand
 			else:
-				operators.append((I['.'] if isinstance(operand, float) else I['?'])*side)
+				operators.append(I['.'] if isinstance(operand, float) else I['?'])
 				operands.append(operand)
 				operands[beg]+=1
 
 			i += len(m.group())
 
+	operators.pop()
+	operands.pop()
+
 	return operators, operands
 
 
 # Input: operators, operands
-# Rationalizes operators and operands
-# Output: (mutates operators operands)
-def resequence(operators: list, operands: list, phase = 0):
-
-	if operators[-1]!=I[';']:
-		operators.append(I[';'])
-		operands.append(SEMILEN)
-
-	olen=len(operators)
-	o=0
-	while o<olen:
-		if operators[o]==I[';']: beg=o
-		matched=False
-
-		for seq in SEQ[phase]:
-			if tuple(operators[o:o+len(seq)])!=seq: continue
-			matched=True
-			i=0
-			offset=0
-			instrs=SEQ[phase][seq]
-			ilen=len(instrs)
-			while i<ilen:
-				instr=instrs[i]
-				if instr == 'keep': pass
-				elif instr == 'insert':
-					i+=1
-					while i<ilen:
-						operators.insert(o+i, instrs[i])
-						operands.insert(o+i, OPR[instrs[i]]['dval'])
-						offset += 1
-						i+=1
-				elif isinstance(instr, int): operators[o+i+offset]=instr
-				elif instr == 'kill':
-					operators.pop(o+i+offset)
-					operands.pop(o+i+offset)
-					olen-=1
-				elif instr == 'empty':
-					if operands[o+i+offset] is None:
-						operators.pop(o+i+offset)
-						operands.pop(o+i+offset)
-						offset-=1
-				i+=1
-			
-			olen+=offset
-			operands[beg]+=offset
-
-		if not matched: o+=1
-
-# Input: operators, operands
 # Output: Memelang string operator1operand1operator2operand2
-def deparse(operators: list, operands: list, deparse_set=None) -> str:
+def encode(operators: list, operands: list, encode_set=None) -> str:
 
-	if not deparse_set: deparse_set={}
+	if not encode_set: encode_set={}
 	mqry = ''
 
 	for o,operator in enumerate(operators):
@@ -401,13 +320,13 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 
 			expression+=str(operand)
 
-		if operator == I[';'] and deparse_set.get('newline'): expression+="\n"
+		if operator == I[';'] and encode_set.get('newline'): expression+="\n"
 
-		# Append the deparsed expression
-		if deparse_set.get('html'): mqry += '<var class="v' + str(operator) + '">' + html.escape(expression) + '</var>'
+		# Append the encoded expression
+		if encode_set.get('html'): mqry += '<var class="v' + str(operator) + '">' + html.escape(expression) + '</var>'
 		else: mqry += expression
 
-	if deparse_set.get('html'): mqry = '<code class="meme">' + mqry + '</code>'
+	if encode_set.get('html'): mqry = '<code class="meme">' + mqry + '</code>'
 
 	# FIX LATER
 	mqry = mqry.replace('1.0=T', 't=').replace('=T1.0', '=t').replace('1.0#=', 't=').replace('#=1.0', '=t').replace(';;', ';')
@@ -415,7 +334,7 @@ def deparse(operators: list, operands: list, deparse_set=None) -> str:
 	return mqry
 
 def out (operators: list, operands: list):
-	print(deparse(operators, operands, {'newline': True}))
+	print(encode(operators, operands, {'newline': True}))
 
 
 def nxt(operators: list, operands: list, beg: int = 1):
@@ -433,7 +352,7 @@ def querify(mqry: str, meme_table: str = None, name_table: str = None):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
 
-	operators, operands = parse(mqry)
+	operators, operands = decode(mqry)
 
 	if name_table: 
 		operands = identify(operands, name_table)
@@ -470,7 +389,7 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 	beg=o
 	olen=len(operators)
 	while o<olen:
-		if operators[o]==-I['-]'] and operands[o]==I['qry']:
+		if operators[o]==-I['@'] and operands[o]==I['qry']:
 			qry_set[operands[o+1]]=True
 			skip=True
 
@@ -557,12 +476,7 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 			params.extend(qry_params)
 
 	for cte_out in range(cte_beg, z):
-		sel_sqls.append(f"SELECT a0, acdb FROM z{cte_out+1}" + ('' if cte_out+1 == z else f" WHERE a0 IN (SELECT a0 FROM z{z})"))
-
-	# FIX LATER
-	# Apply logic to As
-	if qry_set.get(I['of']):
-		sel_sqls.append(f"SELECT m0.aid, 't=' || m0.aid::text || '[{I['of']}[' || z{z}.did::text || ']' || z{z}.bid::text || '{{' || z{z}.wop::text || '}}' || z{z}.wal::text as acdb FROM {meme_table} m0 JOIN z{z} ON m0.aid = z{z}.bid AND m0.cid*-1 = z{z}.did WHERE m0.cid={I['is']}")
+		sel_sqls.append(f"SELECT a0, arbeq FROM z{cte_out+1}" + ('' if cte_out+1 == z else f" WHERE a0 IN (SELECT a0 FROM z{z})"))
 
 	return cte_sqls, sel_sqls, params
 
@@ -572,21 +486,16 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	if not meme_table: meme_table=DB_TABLE_MEME
 
-	params = []
-
 	qparts = {
-		'select': [
-			"(A0) AS a0",
-			"m0.val::text || '{' || m0.vop::text || '}' || (A0)::text || '[' || m0.cid::text || '[' || (R0)::text || ']' || (B0)::text"
-		],
+		'select': ["(aid0) AS a0", "(aid0)::text || '[' || (rid0)::text || ']' || (bid0)::text"],
 		'join': [f"FROM {meme_table} m0"],
 		'where': []
 	}
 
+	params = []
 	inversions = [False]
-
 	m = 0
-	wop='='
+	eql='='
 	prev_opr = None
 
 	for i, operator in enumerate(operators):
@@ -594,50 +503,43 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 		form = OPR[operator]['form']
 		dcol = OPR[operator]['dcol']
 
-		if operator in (I['-=='], I['-.']):
-			raise Exception(f'Operator {K[operator]} is not supported yet')
-
 		# New row
-		elif (operator == I[']'] and prev_opr==I[']']) or (operator == I['['] and prev_opr in (I['['], I[']'])):
+		if (operator == I[']'] and prev_opr==I[']']) or (operator == I['['] and prev_opr in (I['['], I[']'])):
 			m+=1
-			qparts['select'][1]+=f" || '[' || (R{m})::text || ']' || (B{m})::text"
-			qparts['join'].append(f"JOIN {meme_table} m{m} ON (B{m-1})=(A{m})")
+			qparts['select'][1]+=f" || '[' || (rid{m})::text || ']' || (bid{m})::text"
+			qparts['join'].append(f"JOIN {meme_table} m{m} ON (bid{m-1})=(aid{m})")
 			inversions.append(False)
 
 		# Inversion
-		if operator == I['[']:
-			if operand is not None and operand<0:
-				inversions[m]=True
-				operand*=-1
-
-		elif operator == I[']']: dcol=f"(B{m})"
-		elif operator == I['-]']: dcol=f"(A{m})"
-		elif operator == I['==']:
-			wop=K[int(operand)]
-			continue
-		elif dcol: dcol = f"m{m}.{dcol}"
+		if operator == I['['] and operand is not None and operand<0: inversions[m]=True
 
 		prev_opr = operator
-		
-		if dcol and operand is not None:
+
+		if dcol == 'eql':
+			eql=K[int(operand)]
+			continue
+	
+		elif dcol and operand is not None:
 			if form in (INT, AID): operand=int(operand)
 			elif form == DEC: operand=float(operand)
 			else: raise Exception('invalid form')
 
-			eql = wop if dcol=='wal' else '='
+			eop = eql if dcol=='qnt' else '='
 
-			qparts['where'].append(f"{dcol}{eql}%s")
+			qparts['where'].append(f"({dcol}{m}){eop}%s")
 			params.append(operand)
 
 
 	if aidOnly: qparts['select'].pop(1)
-	else: qparts['select'][1] += f" || '{{' || m{m}.wop::text || '}}' || m{m}.wal::text AS acdb"
+	else: qparts['select'][1] += f" || '{{' || m{m}.eql::text || '}}' || m{m}.qnt::text AS arbeq"
 
 	for i,inv in enumerate(inversions):
 		for qpart in qparts:
 			for p, _ in enumerate(qparts[qpart]):
-				if inv: qparts[qpart][p]=qparts[qpart][p].replace(f"(A{i})", f"m{i}.bid").replace(f"(B{i})", f"m{i}.aid").replace(f"(R{i})", f"(m{i}.did*-1)")
-				else: qparts[qpart][p]=qparts[qpart][p].replace(f"(A{i})", f"m{i}.aid").replace(f"(B{i})", f"m{i}.bid").replace(f"(R{i})", f"m{i}.did")
+				for op in OPR:
+					if OPR[op]['dcol']:
+						newcol = 'icol' if inv else 'dcol'
+						qparts[qpart][p]=qparts[qpart][p].replace(f"({OPR[op]['dcol']}{i})", f"(m{i}.{OPR[op][newcol]})")
 		
 	return [
 		', '.join(qparts['select']),
@@ -750,7 +652,7 @@ def get(mqry: str, meme_table: str = None, name_table: str = None):
 
 	mres=''
 	for meme in memes: mres+=meme[1]+';'
-	output[0], output[1] = parse(mres)
+	output[0], output[1] = decode(mres)
 
 	if namekeys: output.extend(namify(output[1], namekeys, name_table))
 
@@ -770,10 +672,6 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 	# Load IDs
 	aidcache(operands, name_table)
 
-	# Normalize memes
-	resequence(operators, operands, 2)
-	resequence(operators, operands, 3)
-
 	missings = {}
 	sqls = {meme_table:[], name_table:[]}
 	params = {meme_table:[], name_table:[]}
@@ -782,19 +680,26 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 	o=2
 	olen=len(operators)
 	while o<olen:
-		if OPR[abs(operators[o])]['form']==AID:
+		if OPR[operators[o]]['form']==AID:
 			if isinstance(operands[o], int): pass
-			elif str(operands[o]).isdigit(): operands[o]=int(operands[o])
-			elif I.get(operands[o]): operands[o]=I[operands[o]]
-			else: missings[operands[o]]=1
+
+			operand=str(operands[o])
+			if operand.startswith('-'): 
+				operand=operand[1:]
+				sign=-1
+			else: sign=1
+
+			if operand.isdigit(): operands[o]=int(operands[o])
+			elif I.get(operand): operands[o]=I[operands[o]]*sign
+			else: missings[operand]=1
 		o+=1
 
 	# Mark id-key for writing from id]nam]key="xyz"
 	end=1
 	while (end := nxt(operators, operands, (beg := end))):
 		beg+=1
-		if end-beg==MEMELEN and operators[beg:end]==NAMEROW and operands[beg+D]==I['nam'] and operands[beg+B]==I['key']:
-			key = operands[beg+W]
+		if operators[beg:end]==ARBES and operands[beg+R]==I['nam'] and operands[beg+B]==I['key']:
+			key = operands[beg+Q]
 			aid = operands[beg+A]
 			missings.pop(key, None)
 			sqls[name_table].append("(%s,%s,%s)")
@@ -815,7 +720,9 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 	# Swap missing keys for new IDs
 	o=2
 	while o<olen:
-		if OPR[abs(operators[o])]['form']==AID and isinstance(operands[o], str): operands[o]=I[operands[o]]
+		if OPR[operators[o]]['form']==AID and isinstance(operands[o], str):
+			if operands[o].startswith('-'): operands[o]=I[operands[o][1:]]*-1
+			else: operands[o]=I[operands[o]]
 		o+=1
 
 	# Pull out non-key names and truths
@@ -823,23 +730,32 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 	while (end := nxt(operators, operands, (beg := end))):
 		beg+=1
 		if end-beg==0: continue
-		elif end-beg!=MEMELEN or operators[beg:end-2]!=VOACDB:
-			print(end-beg, MEMELEN, operators[beg:end-2], VOACDB)
-			print([K[op] for op in operators[beg:end]])
-			print([K[op] for op in operands[beg:end]])
-			out(operators[beg:end], [K[op] for op in operands[beg:end]])
-			raise Exception('Could not write')
 
-		# String name
-		if operators[beg+W]==I['"']:
+		elif operators[beg:end]==ARBES:
 			if operands[beg+B]!=I['key']:
-				params[name_table].extend([operands[beg+A], operands[beg+B], operands[beg+W]])
+				params[name_table].extend([operands[beg+A], operands[beg+B], operands[beg+Q]])
 				sqls[name_table].append('(%s,%s,%s)')
 
-		# True/False/Float V=A[C]D]B=W
-		else:
+		elif operators[beg:end]==ARB:
+			params[meme_table].extend(operands[beg:end]+[I['#='], I['t']])
+			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+
+		elif operators[beg:end]==ARBEQ:
 			params[meme_table].extend(operands[beg:end])
-			sqls[meme_table].append('(%s,%s,%s,%s,%s,%s,%s,%s)')
+			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+
+		elif operators[beg:end]==LOGI:
+			v=-999999999
+			params[meme_table].extend([operands[beg], operands[beg+1], v, I['#='], I['t']])
+			params[meme_table].extend([v, operands[beg+3], operands[beg+4], I['#='], I['t']])
+			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+
+		else:
+			print('OPERATORS:', [K[op] for op in operators[beg:end]])
+			print('OPERANDS:', [op if not K.get(op) else K[op] for op in operands[beg:end]])
+			out(operators[beg:end], [op if not K.get(op) else K[op] for op in operands[beg:end]])
+			raise Exception('Could not write')
 
 	for tbl in params:
 		if params[tbl]:
@@ -865,30 +781,6 @@ def dename(mqry: str):
 	return ' '.join(remaining_terms), identify(list(set(extracted_terms)))
 
 
-# FIX LATER
-# Apply logic
-def logify (operators: list, operands: list):
-	ACs = {}
-
-	# Pull out A[C[D]B logic rules
-	end=1
-	while (end := nxt(operators, operands, (beg := end))):
-		beg+=1
-		if end-beg==MEMELEN+1 and operators[beg:end-2]==VOACDB and operands[beg+C]!=I['is']:
-			if not ACs.get(operands[beg+A]): ACs[operands[beg+A]]={}
-			if not ACs[operands[beg+A]].get(operands[beg+C]): ACs[operands[beg+A]][operands[beg+C]]=[]
-			ACs[operands[beg+A]][operands[beg+C]*-1].append(beg)
-
-	# Apply A[-C]X[D]B=t rules to X for X[C]A => X[D]B=t
-	end=1
-	while (end := nxt(operators, operands, (beg := end))):
-		beg+=1
-		if operators[beg:end-2] == VOACDB and operands[beg+C]==I['is'] and ACs.get(operands[beg+B]) and ACs[operands[beg+B]].get(operands[beg+D]):
-			for lobeg in ACs[operands[beg+B]][operands[beg+D]]:
-				operators.extend([I[';']] + VOACDB)
-				operands.extend([SEMILEN+MEMELEN, I['t'], I['#='], operands[beg+A], I['of'], operands[lobeg+D], operands[lobeg+B], operands[lobeg+WO], operands[lobeg+W]])
-
-
 #### MEME FILE ####
 
 def read (file_path: str):
@@ -896,7 +788,7 @@ def read (file_path: str):
 	with open(file_path, 'r', encoding='utf-8') as f:
 		for ln, line in enumerate(f, start=1):
 			if line.strip() == '' or line.strip().startswith('//'): continue
-			operators, operands = parse(line)
+			operators, operands = decode(line)
 			if len(operators)>2:
 				output[0].extend(operators[1:])
 				output[1].extend(operands[1:])
@@ -906,4 +798,4 @@ def read (file_path: str):
 
 def write (file_path: str, operators: list, operands: list):
 	with open(file_path, 'w', encoding='utf-8') as file:
-		file.write(deparse(operators, operands, {'newline':True}))
+		file.write(encode(operators, operands, {'newline':True}))

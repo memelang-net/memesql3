@@ -17,8 +17,8 @@ def sql(qry_sql):
 
 # Search for memes from a memelang query string
 def qry(mqry):
-	operators, operands = memelang.parse(mqry)
-	print ("QUERY:    ", memelang.deparse(operators, operands))
+	operators, operands = memelang.decode(mqry)
+	print ("QUERY:    ", memelang.encode(operators, operands))
 	print("OPERATORS:", [K[op] for op in operators])
 	print("OPERANDS: ", operands)
 
@@ -58,7 +58,7 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (val DECIMAL(20,6), vop SMALLINT, aid BIGINT, cid BIGINT, did BIGINT, bid BIGINT, wop SMALLINT, wal DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_alrb_idx ON {DB_TABLE_MEME} (aid,cid,did,bid); CREATE INDEX {DB_TABLE_MEME}_did_idx ON {DB_TABLE_MEME} (did); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid BIGINT, rid BIGINT, bid BIGINT, eql SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_aid_idx ON {DB_TABLE_MEME} (aid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid,bid,str); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
@@ -86,18 +86,18 @@ def qrytest():
 		'george_washington',
 		'george_washington]',
 		'george_washington[',
-		'george_washington[is',
-		'george_washington[is[',
-		'george_washington[is[]',
-		'george_washington[[opt]',
-		'george_washington[is[opt]',
+		'george_washington',
+		'george_washington[',
+		'george_washington[]',
+		'george_washington[opt]',
 		'george_washington[birth',
 		'george_washington[birth]',
 		'george_washington[birth[year',
 		'george_washington[birth[year]',
 		'george_washington[birth[year]adyear',
 		'george_washington[birth[[',
-		'george_washington[is[birth[[',
+		'george_washington[birth[[]',
+		'george_washington[birth[][]',
 		']adyear',
 		'[year]adyear',
 		'[birth[year]adyear',
@@ -108,20 +108,18 @@ def qrytest():
 		'[spouse]',
 		'[spouse] [child]',
 		'[birth[year]adyear>=1800 [birth[year]adyear<1900',
-		'[is[birth[year]adyear>=1800 [birth[year]adyear<1900',
 		'[spouse [child [birth[year]adyear<1900',
 		'george_washington; john_adams',
-		'george_washington;; john_adams',
-		'george_washington;; john_adams;',
+		'george_washington;; john_adams;;',
 	]
 	errcnt=0
 
 	for mqry in queries:
 		print('First Query:  ', mqry)
-		operators, operands = memelang.parse(mqry)
+		operators, operands = memelang.decode(mqry)
 		print('Operators:', [K[op] for op in operators])
 		print('Operands:', operands)
-		mqry2 = memelang.deparse(operators, operands)
+		mqry2 = memelang.encode(operators, operands)
 		print('Second Query: ', mqry2)
 		sql, params = memelang.querify(mqry, DB_TABLE_MEME, False)
 		print('SQL: ', memelang.morfigy(sql, params))

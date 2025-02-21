@@ -8,7 +8,7 @@ These Python scripts receive [Memelang v3](https://memelang.net/03/) queries, co
 * *conf.py* database configurations
 * *core.meme* core memelang id-keys to be loaded into the database
 * *main.py* CLI interface for queries and testing
-* *memelang.py* library to parse Memelang queries and execute in Postgres
+* *memelang.py* library to decode Memelang queries and execute in Postgres
 * *presidents.meme* example Memelang data for the U.S. presidents
 
 
@@ -53,4 +53,4 @@ Outputs:
 	SQL: WITH z1 AS (SELECT m0.aid AS a0, ... AS acdb FROM meme m0 WHERE m0.aid=1000025 AND m0.did=1000023) SELECT acdb FROM z1
 
 	RESULTS:
-	t=john_adams[is[spouse]abigail_adams=t;
+	john_adams[spouse]abigail_adams=t;
