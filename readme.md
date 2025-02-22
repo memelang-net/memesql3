@@ -26,14 +26,8 @@ Installation on Ubuntu:
 	cd memesql
 
 	# Configure the db.py file according for your Postgres settings
-	# Create postgres DB and user from the CLI
-	sudo python3 ./main.py dbadd
-
-	# Create meme and name tables in the DB
-	sudo python3 ./main.py tableadd
-
-	# Load core names
-	python3 ./main.py file ./core.meme
+	# Create database and tables
+	sudo python3 ./main.py install
 
 	# (Optional) load example presidents data
 	python3 ./main.py file ./presidents.meme

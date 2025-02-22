@@ -22,12 +22,13 @@ MEMELEN   = 5
 SEMILEN   = 0.5
 
 LOGI       = [I['@'], I['['], I[']'], I['['], I[']']]
-
+LOGIF      = [I['.'], I['=='], I['@'], I['['], I[']'], I['['], I[']'], I['=='], I['.']]
+LOGIT      = [I['#'], I['=='], I['@'], I['['], I[']'], I['['], I[']'], I['=='], I['#']]
 
 # Forms
 NON    = 1.1		# Value has no form, like END
 INT    = 1.2		# Value is integer, like True, False, Get
-DEC    = 1.3		# Value is decimal number
+FLT    = 1.3		# Value is decimal number
 AID    = 1.4		# Value is an ID integer
 STR    = 1.5		# Value is a string
 
@@ -62,11 +63,18 @@ OPR = {
 		'out'  : [AID],
 	},
 	I['.']: {
-		'form' : DEC,
+		'form' : FLT,
 		'dcol' : 'qnt',
 		'icol' : 'qnt',
 		'dval' : I['t'],
-		'out'  : [DEC],
+		'out'  : [FLT],
+	},
+	I['#']: {
+		'form' : AID,
+		'dcol' : 'qnt',
+		'icol' : 'qnt',
+		'dval' : I['t'],
+		'out'  : [AID],
 	},
 	I['"']: {
 		'form' : STR,
@@ -105,7 +113,7 @@ OPR = {
 	},
 }
 
-# For operate()
+# For decode()
 INCOMPLETE = 1
 INTERMEDIATE = 2
 COMPLETE = 3
@@ -117,6 +125,7 @@ STRTOK = {
 	"<"  : [INTERMEDIATE,I['=='], I['<']],
 	"="  : [COMPLETE, I['=='], I['=']],
 	"!=" : [COMPLETE, I['=='], I['!=']],
+	"#=" : [COMPLETE, I['=='], I['#=']],
 	">=" : [COMPLETE, I['=='], I['>=']],
 	"<=" : [COMPLETE, I['=='], I['<=']],
 	"["  : [COMPLETE, I['['], None],
@@ -124,6 +133,28 @@ STRTOK = {
 	";"  : [COMPLETE, I[';'], SEMILEN],
 	' '  : [COMPLETE, I['&&'], I['&']]
 }
+
+SEQ = {}
+
+# This is a lazy way to fill SEQ while in development
+PRESEQ = [
+	# Prior operator is starting A without prefix
+	[[I[';'], I['&']], [I['?']], [I[']'],I['['],I['&'],I[';']], I['@']],
+	[[I['==']], [I['?']], [I['['],I[']']], I['@']],
+
+	# Equals float
+	[[I[';']], [I['?']], [I['==']], I['.']],
+	[[I['==']], [I['?']], [I[';']], I['.']],
+
+	# Equals true
+	[[I['#']], [I['==']], [I['@'],I['?']], I['#=']],
+	[[I[']'],I['['],I['@']], [I['==']], [I['#']], I['#=']],
+]
+for xs, ys, zs, v in PRESEQ:
+	for x in xs:
+		for y in ys:
+			for z in zs:
+				SEQ[(x,y,z)]=v
 
 
 #### GENERAL STRINGS #####
@@ -160,9 +191,9 @@ def insert(query: str, params: list = []):
 		cursor.execute(query, params)
 
 
-def maxnum(col: str = 'aid', table: str = None):
+def aggnum(col: str = 'aid', agg: str = 'MAX', table: str = None):
 	if not table: table=DB_TABLE_MEME
-	result = select(f"SELECT MAX({col}) FROM {table}")
+	result = select(f"SELECT {agg}({col}) FROM {table}")
 	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
 
 
@@ -186,13 +217,7 @@ def selectin(cols: dict = {}, table: str = None):
 # Input: Memelang string operator1operand1operator2operand2
 # Output: [operator1, operator2, ...], [operand1, operand2, ...]
 def decode(mqry: str):
-	operators, operands  = operate(mqry)
-	return operators, operands
 
-
-# Input: Memelang string: ax[dy]bz>=w
-# Output: [operator1, operator2, ...], [operand1, operand2, ...]
-def operate(mqry: str):
 	# Replace multiple spaces with a single space
 	mqry = ' '.join(str(mqry).strip().split())
 
@@ -201,9 +226,6 @@ def operate(mqry: str):
 
 	# Remove spaces around operators
 	mqry = re.sub(r'\s*([;!<>=]+)\s*', r'\1', mqry)
-
-	# Prepend zero before decimals, such as =.5 to =0.5
-	mqry = re.sub(r'([<>=])(\-?)\.([0-9])', lambda m: f"{m.group(1)}{m.group(2)}0.{m.group(3)}", mqry)
 
 	# Append semicolon
 	mqry+=';'
@@ -244,8 +266,8 @@ def operate(mqry: str):
 				token=K[int(token[1:-1])]
 
 			elif STRTOK[token][0]<COMPLETE and i < mqry_len-1 and STRTOK.get(token+mqry[i+1]):
-					token+=mqry[i+1]
-					i+=1
+				token+=mqry[i+1]
+				i+=1
 
 			if not STRTOK.get(token) or STRTOK[token][0] == INCOMPLETE:
 				raise Exception(f"Incomplete operator {token} at {token} in {mqry}")
@@ -260,9 +282,6 @@ def operate(mqry: str):
 				beg=len(operators)
 			else: operands[beg]+=1
 
-			# Prior operator is starting A without prefix
-			if operator in (I[']'],I['['],I[';']) and operators[-1]==I['?'] and operators[-2]==I[';']: operators[-1]=I['@']
-
 			operators.append(operator)
 			operands.append(operand)
 			i += 1
@@ -272,19 +291,33 @@ def operate(mqry: str):
 			m = re.match(r'[a-z0-9\_\.\-]+', mqry[i:])
 			if not m: raise Exception(f"Memelang decode error: Unexpected '{mqry[i]}' at char {i} in {mqry}")
 
+			operator=I['?']
+
 			# format
 			operand = m.group()
-			if operand in ('f','t','g'): operand=I[operand]
-			elif '.' in operand or operators[-1]==I['==']: operand=float(operand)
-			elif re.match(r'^-?[0-9]+$', operand): operand=int(operand)
+			if operand in ('f','t','g'): 
+				operand=I[operand]
+				operator=I['#']
+			elif '.' in operand:
+				operand=float(operand)
+				operator=I['.']
+			elif re.match(r'^-?[0-9]+$', operand):
+				operand=int(operand)
 
 			if operators[-1] in (I[']'],I['[']): operands[-1]=operand
 			else:
-				operators.append(I['.'] if isinstance(operand, float) else I['?'])
+				operators.append(operator)
 				operands.append(operand)
 				operands[beg]+=1
 
 			i += len(m.group())
+
+		# Resequence last 3 operators
+		if SEQ.get(tuple(operators[-3:])): 
+			replacement = SEQ[tuple(operators[-3:])]
+			if OPR.get(replacement): operators[-2]=replacement
+			else: operands[-2]=replacement
+
 
 	operators.pop()
 	operands.pop()
@@ -303,7 +336,7 @@ def encode(operators: list, operands: list, encode_set=None) -> str:
 		if o<2: continue
 		expression=''
 		for fld in OPR[operator]['out']:
-			if fld == DEC:
+			if fld == FLT:
 				sign = '-' if operands[o] < 0 else ''
 				ones = str(abs(operands[o]))
 				tenths = ''
@@ -329,7 +362,7 @@ def encode(operators: list, operands: list, encode_set=None) -> str:
 	if encode_set.get('html'): mqry = '<code class="meme">' + mqry + '</code>'
 
 	# FIX LATER
-	mqry = mqry.replace('1.0=T', 't=').replace('=T1.0', '=t').replace('1.0#=', 't=').replace('#=1.0', '=t').replace(';;', ';')
+	mqry = mqry.replace('t#=', 't=').replace('#=t', '=t').replace('1.0=T', 't=').replace('=T1.0', '=t').replace('1.0#=', 't=').replace('#=1.0', '=t').replace(';;', ';')
 
 	return mqry
 
@@ -423,14 +456,15 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 
 	# If qry_set['all'] and no true/false/or conditions
 	if qry_set.get(I['all']) and false_cnt == 0 and or_cnt == 0:
-		select_sql, from_sql, where_sql, qry_params = selectify([], [], meme_table)
-		return [f"SELECT {select_sql} FROM {meme_table}", []]
+		qry_select, _ = selectify([], [], meme_table)
+		# FIX LATER
+		return [], [qry_select], []
 
 	z  = cte_beg
 	params   = []
 	cte_sqls = []
 	sel_sqls = []
-	notwheres = []
+	notwhere = None
 	notparams = []
 
 	# Process NOT groups
@@ -438,41 +472,38 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 		if or_cnt < 1: raise Exception('A query with a false statement must contain at least one true statement.')
 
 		for suboperators, suboperands in groups['false'][0]:
-			select_sql, from_sql, where_sql, qry_params = selectify(suboperators, suboperands, meme_table, True)
-			notwheres.append(f"m0.aid NOT IN (SELECT {select_sql} {from_sql} WHERE {where_sql})")
+			qry_select, qry_params = selectify(suboperators, suboperands, meme_table, True)
+			notwhere += f" AND m0.aid NOT IN ({qry_select})"
 			notparams.extend(qry_params)
 
 	# Process OR groups
 	for gnum in groups['true']:
 		or_selects = []
 		for suboperators, suboperands in groups['true'][gnum]:
-			select_sql, from_sql, where_sql, qry_params = selectify(suboperators, suboperands, meme_table)
 
-			or_sql = f"SELECT {select_sql} {from_sql} WHERE {where_sql}"
-			if z==cte_beg:
-				# FIX LATER
-				if notwheres: 
-					or_sql+=' AND ' + ' AND '.join(notwheres)
-					qry_params.extend(notparams)
-					notwheres=[]
+			qry_select, qry_params = selectify(suboperators, suboperands, meme_table)
 
-			else: or_sql+=f" AND m0.aid IN (SELECT a0 FROM z{z})"
+			if z>cte_beg: qry_select+=f" AND m0.aid IN (SELECT a0 FROM z{z})"
+			elif notwhere: 
+				qry_select += notwhere
+				qry_params.extend(notparams)
+				notwhere=''
 
-			or_selects.append(or_sql)
+			or_selects.append(qry_select)
 			params.extend(qry_params)
 		z += 1
 		cte_sqls.append(f"z{z} AS ({' UNION '.join(or_selects)})")
 
 	# select all data related to the matching As
 	if qry_set.get(I['all']):
-		select_sql, from_sql, where_sql, qry_params = selectify([I['[']], [], meme_table)
-		sel_sqls.append(f"SELECT {select_sql} {from_sql} WHERE m0.aid IN (SELECT a0 FROM z{z})")
+		qry_select, qry_params = selectify([I['[']], [], meme_table)
+		sel_sqls.append(f"SELECT {qry_select} {from_sql} WHERE m0.aid IN (SELECT a0 FROM z{z})")
 
 	# get groups
 	else:
 		for suboperators, suboperands in groups['get'][0]:
-			select_sql, from_sql, where_sql, qry_params = selectify(suboperators, suboperands, meme_table)
-			sel_sqls.append(f"SELECT {select_sql} {from_sql} WHERE {where_sql} AND a0 IN (SELECT a0 FROM z{z})")
+			qry_select, qry_params = selectify(suboperators, suboperands, meme_table)
+			sel_sqls.append(f"{qry_select} AND a0 IN (SELECT a0 FROM z{z})")
 			params.extend(qry_params)
 
 	for cte_out in range(cte_beg, z):
@@ -487,8 +518,8 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	if not meme_table: meme_table=DB_TABLE_MEME
 
 	qparts = {
-		'select': ["(aid0) AS a0", "(aid0)::text || '[' || (rid0)::text || ']' || (bid0)::text"],
-		'join': [f"FROM {meme_table} m0"],
+		'select': ["(aid0) AS a0", "(aid0)::text || '[' || (rid0)::text"],
+		'join': [f" FROM {meme_table} m0"],
 		'where': []
 	}
 
@@ -496,7 +527,7 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	inversions = [False]
 	m = 0
 	eql='='
-	prev_opr = None
+	prev_operator = None
 
 	for i, operator in enumerate(operators):
 		operand = operands[i]
@@ -504,16 +535,16 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 		dcol = OPR[operator]['dcol']
 
 		# New row
-		if (operator == I[']'] and prev_opr==I[']']) or (operator == I['['] and prev_opr in (I['['], I[']'])):
+		if (operator == I[']'] and prev_operator==I[']']) or (operator == I['['] and prev_operator in (I['['], I[']'])):
 			m+=1
-			qparts['select'][1]+=f" || '[' || (rid{m})::text || ']' || (bid{m})::text"
+			qparts['select'][1]+=(f" || ']' || (bid{m-1})::text" if prev_operator==I[']'] else '') + f" || '[' || (rid{m})::text"
 			qparts['join'].append(f"JOIN {meme_table} m{m} ON (bid{m-1})=(aid{m})")
 			inversions.append(False)
 
 		# Inversion
 		if operator == I['['] and operand is not None and operand<0: inversions[m]=True
 
-		prev_opr = operator
+		prev_operator = operator
 
 		if dcol == 'eql':
 			eql=K[int(operand)]
@@ -521,7 +552,7 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	
 		elif dcol and operand is not None:
 			if form in (INT, AID): operand=int(operand)
-			elif form == DEC: operand=float(operand)
+			elif form == FLT: operand=float(operand)
 			else: raise Exception('invalid form')
 
 			eop = eql if dcol=='qnt' else '='
@@ -531,7 +562,7 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 
 
 	if aidOnly: qparts['select'].pop(1)
-	else: qparts['select'][1] += f" || '{{' || m{m}.eql::text || '}}' || m{m}.qnt::text AS arbeq"
+	else: qparts['select'][1] += f" || ']' || (bid{m})::text || '{{' || m{m}.eql::text || '}}' || m{m}.qnt::text AS arbeq"
 
 	for i,inv in enumerate(inversions):
 		for qpart in qparts:
@@ -541,12 +572,11 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 						newcol = 'icol' if inv else 'dcol'
 						qparts[qpart][p]=qparts[qpart][p].replace(f"({OPR[op]['dcol']}{i})", f"(m{i}.{OPR[op][newcol]})")
 		
-	return [
-		', '.join(qparts['select']),
-		' '.join(qparts['join']),
-		' AND '.join(qparts['where']),
-		params
-	]
+	return ('SELECT '
+		+ ', '.join(qparts['select'])
+		+ ' '.join(qparts['join'])
+		+ ('' if not qparts['where'] else ' WHERE' + ' AND '.join(qparts['where']))
+	), params
 
 
 #### KEY-ID CONVERSION ####
@@ -690,7 +720,7 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 			else: sign=1
 
 			if operand.isdigit(): operands[o]=int(operands[o])
-			elif I.get(operand): operands[o]=I[operands[o]]*sign
+			elif I.get(operand): operands[o]=I[operand]*sign
 			else: missings[operand]=1
 		o+=1
 
@@ -709,7 +739,7 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 
 	# Select new ID for missing keys with no associated ID
 	if missings:
-		aid = maxnum('aid', name_table) or I['cor']
+		aid = aggnum('aid', 'MAX', name_table) or I['cor']
 		for key, val in missings.items():
 			aid += 1
 			sqls[name_table].append("(%s,%s,%s)")
@@ -726,6 +756,7 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 		o+=1
 
 	# Pull out non-key names and truths
+	varmin=0
 	end=1
 	while (end := nxt(operators, operands, (beg := end))):
 		beg+=1
@@ -745,9 +776,22 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
 		elif operators[beg:end]==LOGI:
-			v=-999999999
-			params[meme_table].extend([operands[beg], operands[beg+1], v, I['#='], I['t']])
-			params[meme_table].extend([v, operands[beg+3], operands[beg+4], I['#='], I['t']])
+			if varmin==0: 
+				varmin=aggnum(aid, 'MIN', meme_table)
+				if varmin==0: varmin=I['cor']*-1
+			varmin-=1
+			params[meme_table].extend([operands[beg], operands[beg+1], varmin, I['#='], I['t']])
+			params[meme_table].extend([varmin, operands[beg+3], operands[beg+4], I['#='], I['t']])
+			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+
+		elif operators[beg:end] in (LOGIT, LOGIF):
+			if varmin==0: 
+				varmin=aggnum(aid, 'MIN', meme_table)
+				if varmin==0: varmin=I['cor']*-1
+			varmin-=1
+			params[meme_table].extend([operands[beg+2], operands[beg+3], varmin, operands[beg+1], operands[beg]])
+			params[meme_table].extend([varmin, operands[beg+5], operands[beg+6], operands[beg+7], operands[beg+8]])
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 

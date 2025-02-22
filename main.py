@@ -143,15 +143,25 @@ if __name__ == "__main__":
 	if sys.argv[1] == 'sql': sql(sys.argv[2])
 	elif sys.argv[1] == 'query' or sys.argv[1] == 'qry' or sys.argv[1] == 'q' or sys.argv[1] == 'get' or sys.argv[1] == 'g': qry(sys.argv[2])
 	elif sys.argv[1] == 'file' or sys.argv[1] == 'import': putfile(sys.argv[2])
+
 	elif sys.argv[1] == 'dbadd' or sys.argv[1] == 'adddb': dbadd()
 	elif sys.argv[1] == 'tableadd' or sys.argv[1] == 'addtable': tableadd()
 	elif sys.argv[1] == 'tabledel' or sys.argv[1] == 'deltable': tabledel()
 	elif sys.argv[1] == 'coreadd' or sys.argv[1] == 'addcore': putfile(LOCAL_DIR+'/core.meme')
+
 	elif sys.argv[1] == 'qrytest': qrytest()
-	elif sys.argv[1] == 'recore':
+
+	elif sys.argv[1] == 'install':
+		dbadd()
+		tableadd()
+		putfile(LOCAL_DIR+'/core.meme')
+
+	elif sys.argv[1] == 'reinstall':
 		tabledel()
 		tableadd()
 		putfile(LOCAL_DIR+'/core.meme')
+		if sys.argv[2]=='-presidents': putfile(LOCAL_DIR+'/presidents.meme')
+
 	elif sys.argv[1] == 'fileall' or sys.argv[1] == 'allfile':
 		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
 		for file in files:
