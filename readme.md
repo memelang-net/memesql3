@@ -13,16 +13,16 @@ The basic syntax of Memelang is that some node `A` has some edge relation `R` wi
 
 	A[R]B=Q
 
-	// "It is true that John Adams attended Harvard"
+	# "It is true that John Adams attended Harvard"
 	john_adams[college]harvard=t
 
-	// List all relations (edges and connected nodes) of John Adams
+	# List all relations (edges and connected nodes) of John Adams
 	john_adams
 
-	// List all colleges that John Adams attended
+	# List all colleges that John Adams attended
 	john_adams[college]
 
-	// List all people (nodes) that attended Harvard
+	# List all people (nodes) that attended Harvard
 	[college]harvard
 
 Read the [full documentation here](https://memelang.net/03/).
@@ -30,7 +30,7 @@ Read the [full documentation here](https://memelang.net/03/).
 
 ## Tables
 
-Relations/edges are stores in the `meme` table:
+Relations are stores in the `meme` table. Each node and edge is given an integer ID number for compact storage.
 
 	CREATE TABLE meme (
 	 aid BIGINT, 
@@ -50,7 +50,7 @@ Relations/edges are stores in the `meme` table:
 | qnt  | **Quantity** (0 = false, 1 = true, or other numeric values). |
 
 
-Names are stored in the `name` table:
+String names for nodes and edges are stored in the `name` table:
 
 	CREATE TABLE name (
 	 aid BIGINT, 
@@ -101,8 +101,7 @@ Execute a query:
 
 	# python3 ./main.py get "john_adams[spouse"
 
-Outputs:
-
+	# Output:
 	john_adams[spouse]abigail_adams=t
 
 
