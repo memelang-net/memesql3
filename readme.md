@@ -25,6 +25,8 @@ The basic syntax of Memelang is that some node `A` has some edge relation `R` wi
 	// List all people (nodes) that attended Harvard
 	[college]harvard
 
+Read the [full documentation here](https://memelang.net/03/).
+
 
 ## Tables
 
@@ -41,11 +43,11 @@ Relations/edges are stores in the `meme` table:
 
 | Column | Description                                                                           |
 |-------:|:--------------------------------------------------------------------------------------|
-| `aid`  | **A** node ID of the relation (john_adams).                                                       |
-| `rid`  | **R** edge ID (college, spouse).                                    |
-| `bid`  | **B** node ID of the relation (harvard).                                                        |
-| `eql`  | Operator ID, typically `=`, but can identify `<`, `>`, `<=`, etc. |
-| `qnt`  | **Quantity** (`0.0` = false, `1.0` = true, or other numeric values). |
+| aid  | **A** node ID of the relation (john_adams).                                                       |
+| rid  | **R** edge ID (college, spouse).                                    |
+| bid  | **B** node ID of the relation (harvard).                                                        |
+| eql  | Operator ID, typically `=`, but can be `<`, `>`, `<=`, etc. |
+| qnt  | **Quantity** (0 = false, 1 = true, or other numeric values). |
 
 
 Names are stored in the `name` table:
@@ -58,9 +60,9 @@ Names are stored in the `name` table:
 
 | Column | Description                                                                |
 |-------:|:---------------------------------------------------------------------------|
-| `aid`  | Numeric ID (matching the `aid` in the `meme` table).                       |
-| `bid`  | Numeric ID representing the **type** of name (e.g., full name, short name).|
-| `str`  | The actual **string name** for the entity (e.g., "John Adams").            |
+| aid  | Numeric ID (matching the `aid` in the `meme` table).                       |
+| bid  | Numeric ID representing the **type** of name (e.g., full name, short name).|
+| str  | The actual **string name** for the entity (e.g., "John Adams").            |
 
 
 ## Files
