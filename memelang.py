@@ -17,7 +17,7 @@ Q  = 4
 ARB       = [I['@'], I['['], I[']']]
 ARBE      = ARB + [I['==']]
 ARBEQ     = ARBE + [I['.']]
-ARBES     = ARBE + [I['"']]
+ARBES     = ARBE + [I['$']]
 MEMELEN   = 5
 SEMILEN   = 0.5
 
@@ -76,7 +76,7 @@ OPR = {
 		'dval' : I['t'],
 		'out'  : [AID],
 	},
-	I['"']: {
+	I['$']: {
 		'form' : STR,
 		'dcol' : 'str',
 		'icol' : 'str',
@@ -248,9 +248,9 @@ def decode(mqry: str):
 				i += 1
 				if mqry[i]=='\\': continue
 				token += mqry[i]
-				if mqry[i]=='"': break
+				if mqry[i]== '"' and mqry[i-1]!='\\': break
 
-			operators.append(I['"'])
+			operators.append(I['$'])
 			operands.append(token[1:-1])
 			operands[beg]+=1
 			i += 1

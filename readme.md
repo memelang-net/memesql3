@@ -44,7 +44,7 @@ Relations are stores in the `meme` table. Each node and edge is given an integer
 | Column | Description                                                                           |
 |-------:|:--------------------------------------------------------------------------------------|
 | aid  | **A** node ID of the relation (john_adams).                                                       |
-| rid  | **R** edge ID (college, spouse).                                    |
+| rid  | **R** edge ID (college).                                    |
 | bid  | **B** node ID of the relation (harvard).                                                        |
 | eql  | Operator ID, typically `=`, but can be `<`, `>`, `<=`, etc. |
 | qnt  | **Quantity** (0 = false, 1 = true, or other numeric values). |
@@ -68,7 +68,6 @@ String names for nodes and edges are stored in the `name` table:
 ## Files
 
 * *conf.py* database configurations
-* *core.meme* core memelang id-keys to be loaded into the database
 * *main.py* CLI interface for queries and testing
 * *memelang.py* library to decode Memelang queries and execute in Postgres
 * *presidents.meme* example Memelang data for the U.S. presidents
@@ -99,10 +98,10 @@ Installation on Ubuntu:
 
 Execute a query:
 
-	# python3 ./main.py get "john_adams[spouse"
+	# python3 ./main.py get "john_adams[college"
 
 	# Output:
-	john_adams[spouse]abigail_adams=t
+	john_adams[college]harvard=t
 
 
 ## License

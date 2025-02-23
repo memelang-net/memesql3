@@ -59,7 +59,7 @@ def dbadd():
 def tableadd():
 	commands = [
 		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid BIGINT, rid BIGINT, bid BIGINT, eql SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_aid_idx ON {DB_TABLE_MEME} (aid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid,bid,str); CREATE INDEX {DB_TABLE_NAME}_bid_idx ON {DB_TABLE_NAME} (bid); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid,bid,str); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
 		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
 	]
@@ -138,6 +138,13 @@ def qrytest():
 	print()
 
 
+def coreadd():
+	mqry=''
+	for key in I: mqry+=f'{I[key]}[nam]key="{key}";'
+	operators, operands = memelang.decode(mqry)
+	memelang.put(operators, operands)
+	memelang.out(operators, operands)
+
 
 if __name__ == "__main__":
 	if sys.argv[1] == 'sql': sql(sys.argv[2])
@@ -147,20 +154,20 @@ if __name__ == "__main__":
 	elif sys.argv[1] == 'dbadd' or sys.argv[1] == 'adddb': dbadd()
 	elif sys.argv[1] == 'tableadd' or sys.argv[1] == 'addtable': tableadd()
 	elif sys.argv[1] == 'tabledel' or sys.argv[1] == 'deltable': tabledel()
-	elif sys.argv[1] == 'coreadd' or sys.argv[1] == 'addcore': putfile(LOCAL_DIR+'/core.meme')
+	elif sys.argv[1] == 'coreadd' or sys.argv[1] == 'addcore': coreadd()
 
 	elif sys.argv[1] == 'qrytest': qrytest()
 
 	elif sys.argv[1] == 'install':
 		dbadd()
 		tableadd()
-		putfile(LOCAL_DIR+'/core.meme')
+		coreadd()
 
 	elif sys.argv[1] == 'reinstall':
 		tabledel()
 		tableadd()
-		putfile(LOCAL_DIR+'/core.meme')
-		if sys.argv[2]=='-presidents': putfile(LOCAL_DIR+'/presidents.meme')
+		coreadd()
+		if len(sys.argv)>2 and sys.argv[2]=='-presidents': putfile(LOCAL_DIR+'/presidents.meme')
 
 	elif sys.argv[1] == 'fileall' or sys.argv[1] == 'allfile':
 		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
