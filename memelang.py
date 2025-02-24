@@ -1,29 +1,28 @@
+import sys
+import os
 import re
+import glob
 import html
 import psycopg2
 from conf import *
 
 #### SETUP ####
-# These are settings for handling Memelang queries. Storing 
+# These are settings for handling Memelang queries. Encoding 
 # these in variables makes them overly explicit, but reduces
-# encoding if/else logic in the later functions.
+# encoding them in if/else logic in the later functions.
 
 # Column order
-A  = 0
-R  = 1
-B  = 2
-E  = 3
-Q  = 4
+A         = 0
+R         = 1
+B         = 2
+E         = 3
+Q         = 4
+SEMILEN   = 0.5
 ARB       = [I['@'], I['['], I[']']]
 ARBE      = ARB + [I['==']]
 ARBEQ     = ARBE + [I['.']]
 ARBES     = ARBE + [I['$']]
-MEMELEN   = 5
-SEMILEN   = 0.5
-
-LOGI       = [I['@'], I['['], I[']'], I['['], I[']']]
-LOGIF      = [I['.'], I['=='], I['@'], I['['], I[']'], I['['], I[']'], I['=='], I['.']]
-LOGIT      = [I['#'], I['=='], I['@'], I['['], I[']'], I['['], I[']'], I['=='], I['#']]
+IMPL       = [I['['], I[']'], I['=='], I['.'], I['&&'], I['['], I[']'], I['=='], I['.']]
 
 # Forms
 NON    = 1.1		# Value has no form, like END
@@ -39,14 +38,16 @@ OPR = {
 		'dcol' : 'aid',
 		'icol' : 'bid',
 		'dval' : None,
-		'out'  : [STR]
+		'out'  : [STR],
+		'aftr' : None,
 	},
 	I[']']: {
 		'form' : AID,
 		'dcol' : 'bid',
 		'icol' : 'aid',
 		'dval' : None,
-		'out'  : [']', STR]
+		'out'  : [']', STR],
+		'aftr' : STR,
 	},
 	I['[']: {
 		'form' : AID,
@@ -54,13 +55,15 @@ OPR = {
 		'icol' : 'rid*-1',
 		'dval' : None,
 		'out'  : ['[', STR],
+		'aftr' : STR,
 	},
 	I['==']: {
 		'form' : AID,
-		'dcol' : 'eql',
-		'icol' : 'eql',
+		'dcol' : 'cpr',
+		'icol' : 'cpr',
 		'dval' : I['#='],
 		'out'  : [AID],
+		'aftr' : I['.'],
 	},
 	I['.']: {
 		'form' : FLT,
@@ -68,13 +71,7 @@ OPR = {
 		'icol' : 'qnt',
 		'dval' : I['t'],
 		'out'  : [FLT],
-	},
-	I['#']: {
-		'form' : AID,
-		'dcol' : 'qnt',
-		'icol' : 'qnt',
-		'dval' : I['t'],
-		'out'  : [AID],
+		'aftr' : None,
 	},
 	I['$']: {
 		'form' : STR,
@@ -82,6 +79,7 @@ OPR = {
 		'icol' : 'str',
 		'dval' : None,
 		'out'  : ['"', STR, '"'],
+		'aftr' : None,
 	},
 	I['||']: {
 		'form' : INT,
@@ -89,13 +87,15 @@ OPR = {
 		'icol' : None,
 		'dval' : None,
 		'out'  : [''],
+		'aftr' : None,
 	},
 	I['&&']: {
 		'form' : AID,
 		'dcol' : None,
 		'icol' : None,
-		'dval' : I['&'],
-		'out'  : [' '],
+		'dval' : I[' '],
+		'out'  : [' ',AID,' '],
+		'aftr' : I['@'],
 	},
 	I[';']: {
 		'form' : NON,
@@ -103,6 +103,7 @@ OPR = {
 		'icol' : None,
 		'dval' : SEMILEN,
 		'out'  : [';'],
+		'aftr' : I['@'],
 	},
 	I['opr']: { # Actually starts operators, treat as close of non-existant prior statement
 		'form' : NON,
@@ -110,6 +111,7 @@ OPR = {
 		'icol' : None,
 		'dval' : I['mix'],
 		'out'  : [''],
+		'aftr' : None,
 	},
 }
 
@@ -131,30 +133,9 @@ STRTOK = {
 	"["  : [COMPLETE, I['['], None],
 	"]"  : [COMPLETE, I[']'], None],
 	";"  : [COMPLETE, I[';'], SEMILEN],
-	' '  : [COMPLETE, I['&&'], I['&']]
+	' '  : [COMPLETE, I['&&'], I[' ']],
+	">>" : [COMPLETE, I['&&'], I['>>']],
 }
-
-SEQ = {}
-
-# This is a lazy way to fill SEQ while in development
-PRESEQ = [
-	# Prior operator is starting A without prefix
-	[[I[';'], I['&']], [I['?']], [I[']'],I['['],I['&'],I[';']], I['@']],
-	[[I['==']], [I['?']], [I['['],I[']']], I['@']],
-
-	# Equals float
-	[[I[';']], [I['?']], [I['==']], I['.']],
-	[[I['==']], [I['?']], [I[';']], I['.']],
-
-	# Equals true
-	[[I['#']], [I['==']], [I['@'],I['?']], I['#=']],
-	[[I[']'],I['['],I['@']], [I['==']], [I['#']], I['#=']],
-]
-for xs, ys, zs, v in PRESEQ:
-	for x in xs:
-		for y in ys:
-			for z in zs:
-				SEQ[(x,y,z)]=v
 
 
 #### GENERAL STRINGS #####
@@ -274,12 +255,18 @@ def decode(mqry: str):
 
 			completeness, operator, operand = STRTOK[token]
 
+			if OPR[operator]['aftr']==I['@']:
+				if operators[-1]==I[']']:
+					operators.extend([I['=='], I['.']])
+					operands.extend([I['#='], I['t']])
+					operands[beg]+=2
+
 			if operator==I[';']:
 				# Skip double semicolons ;;
 				if operators[-1]==I[';']:
 					i += 1
 					continue
-				beg=len(operators)
+				else: beg=len(operators)
 			else: operands[beg]+=1
 
 			operators.append(operator)
@@ -292,32 +279,29 @@ def decode(mqry: str):
 			if not m: raise Exception(f"Memelang decode error: Unexpected '{mqry[i]}' at char {i} in {mqry}")
 
 			operator=I['?']
+			if OPR[operators[-1]]['aftr']: operator=OPR[operators[-1]]['aftr']
 
 			# format
 			operand = m.group()
 			if operand in ('f','t','g'): 
 				operand=I[operand]
-				operator=I['#']
+				operator=I['.']
+				if operators[-1]==I['==']: operands[-1]=I['#=']
+				else: raise Exception('True/float error')
+
 			elif '.' in operand:
 				operand=float(operand)
 				operator=I['.']
 			elif re.match(r'^-?[0-9]+$', operand):
 				operand=int(operand)
 
-			if operators[-1] in (I[']'],I['[']): operands[-1]=operand
+			if OPR[operators[-1]]['aftr']==STR: operands[-1]=operand
 			else:
 				operators.append(operator)
 				operands.append(operand)
 				operands[beg]+=1
 
 			i += len(m.group())
-
-		# Resequence last 3 operators
-		if SEQ.get(tuple(operators[-3:])): 
-			replacement = SEQ[tuple(operators[-3:])]
-			if OPR.get(replacement): operators[-2]=replacement
-			else: operands[-2]=replacement
-
 
 	operators.pop()
 	operands.pop()
@@ -366,6 +350,7 @@ def encode(operators: list, operands: list, encode_set=None) -> str:
 
 	return mqry
 
+
 def out (operators: list, operands: list):
 	print(encode(operators, operands, {'newline': True}))
 
@@ -381,6 +366,10 @@ def nxt(operators: list, operands: list, beg: int = 1):
 
 # Input: Memelang query string
 # Output: SQL query string
+
+# I stumbled onto something profound here.
+# Memelang input generates Memelang output.
+
 def querify(mqry: str, meme_table: str = None, name_table: str = None):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
@@ -405,7 +394,7 @@ def querify(mqry: str, meme_table: str = None, name_table: str = None):
 		selects.extend(select)
 		params.extend(param)
 
-	return ['WITH ' + ', '.join(ctes) + ' ' + ' UNION '.join(selects), params]
+	return ['WITH ' + ', '.join(ctes) + " SELECT string_agg(arbeq, '') AS arbeq FROM (" + ' UNION '.join(selects) + ')', params]
 
 # Input: operators and operands for one Memelang command
 # Output: One SQL query string
@@ -441,7 +430,7 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 			gkey = 'true'
 			gnum = operands[o]
 
-		elif operators[o]==I['&&'] or o==olen-1:
+		elif operands[o]==I[' '] or o==olen-1:
 			if not skip: 
 				if not groups[gkey].get(gnum): groups[gkey][gnum]=[]
 				groups[gkey][gnum].append([operators[beg:o+1], operands[beg:o+1]])
@@ -507,7 +496,7 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 			params.extend(qry_params)
 
 	for cte_out in range(cte_beg, z):
-		sel_sqls.append(f"SELECT a0, arbeq FROM z{cte_out+1}" + ('' if cte_out+1 == z else f" WHERE a0 IN (SELECT a0 FROM z{z})"))
+		sel_sqls.append(f"SELECT arbeq FROM z{cte_out+1}" + ('' if cte_out+1 == z else f" WHERE a0 IN (SELECT a0 FROM z{z})"))
 
 	return cte_sqls, sel_sqls, params
 
@@ -526,7 +515,7 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	params = []
 	inversions = [False]
 	m = 0
-	eql='='
+	cpr='='
 	prev_operator = None
 
 	for i, operator in enumerate(operators):
@@ -546,8 +535,8 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 
 		prev_operator = operator
 
-		if dcol == 'eql':
-			eql=K[int(operand)]
+		if dcol == 'cpr':
+			cpr=K[int(operand)]
 			continue
 	
 		elif dcol and operand is not None:
@@ -555,14 +544,17 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 			elif form == FLT: operand=float(operand)
 			else: raise Exception('invalid form')
 
-			eop = eql if dcol=='qnt' else '='
+			# FIX LATER
+			if dcol=='qnt' and cpr=='#=': continue
+
+			eop = cpr if dcol=='qnt' else '='
 
 			qparts['where'].append(f"({dcol}{m}){eop}%s")
 			params.append(operand)
 
 
 	if aidOnly: qparts['select'].pop(1)
-	else: qparts['select'][1] += f" || ']' || (bid{m})::text || '{{' || m{m}.eql::text || '}}' || m{m}.qnt::text AS arbeq"
+	else: qparts['select'][1] += f" || ']' || (bid{m})::text || '{{' || m{m}.cpr::text || '}}' || m{m}.qnt::text || ';' AS arbeq"
 
 	for i,inv in enumerate(inversions):
 		for qpart in qparts:
@@ -575,7 +567,7 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 	return ('SELECT '
 		+ ', '.join(qparts['select'])
 		+ ' '.join(qparts['join'])
-		+ ('' if not qparts['where'] else ' WHERE' + ' AND '.join(qparts['where']))
+		+ ('' if not qparts['where'] else ' WHERE ' + ' AND '.join(qparts['where']))
 	), params
 
 
@@ -603,20 +595,20 @@ def aidcache(keys: list, name_table: str = None):
 # Input value is a list of strings ['a', 'b', 'c', 'd']
 # Load key->aid
 # Return the data with any keys with ids
-def identify(keys: list, name_table: str = None):
+def identify(operands: list, name_table: str = None):
 	if not name_table: name_table=DB_TABLE_NAME
 	ids = []
 
-	if not keys: return ids
+	if not operands: return ids
 
 	lookups=[]
-	for key in keys:
+	for key in operands:
 		if isinstance(key, str):
 			lookups.append(key if key[0]!='-' else key[1:])
 
 	aidcache(lookups, name_table)
 
-	for key in keys:
+	for key in operands:
 		if not isinstance(key, str): ids.append(key)
 		elif key[0]=='-':
 			if I.get(key[1:]): ids.append(I[key[1:]]*-1)
@@ -669,20 +661,14 @@ def namify(operands: list, bids: list, name_table: str = None):
 #### PROCESS MEMELANG QUERY FOR SQL QUERY ####
 
 # Input a Memelang query string
-# Replace keys with aids
-# Execute in DB
-# Return results (optionally with "qry.nam:key=1")
 def get(mqry: str, meme_table: str = None, name_table: str = None):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
 	output=[[], []]
 	mqry, namekeys = dename(mqry)
 	sql, params = querify(mqry, meme_table, name_table)
-	memes = select(sql, params)
-
-	mres=''
-	for meme in memes: mres+=meme[1]+';'
-	output[0], output[1] = decode(mres)
+	mres = select(sql, params)
+	output[0], output[1] = decode(mres[0][0])
 
 	if namekeys: output.extend(namify(output[1], namekeys, name_table))
 
@@ -691,7 +677,8 @@ def get(mqry: str, meme_table: str = None, name_table: str = None):
 # Return meme count of above results
 def count(mqry: str, meme_table: str = None, name_table: str = None):
 	sql, params = querify(mqry, meme_table, name_table)
-	return len(select(sql, params))
+	mres=select(sql, params)
+	return 0 if not mres else mres[0][0].count(';')
 
 
 def put (operators: list, operands: list, meme_table: str = None, name_table: str = None):
@@ -767,30 +754,16 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 				params[name_table].extend([operands[beg+A], operands[beg+B], operands[beg+Q]])
 				sqls[name_table].append('(%s,%s,%s)')
 
-		elif operators[beg:end]==ARB:
-			params[meme_table].extend(operands[beg:end]+[I['#='], I['t']])
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
-
 		elif operators[beg:end]==ARBEQ:
 			params[meme_table].extend(operands[beg:end])
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
-		elif operators[beg:end]==LOGI:
+		elif operators[beg:end]==IMPL and operands[beg+4]==I['>>']:
 			if varmin==0: 
 				varmin=aggnum(aid, 'MIN', meme_table)
 				if varmin==0: varmin=I['cor']*-1
 			varmin-=1
-			params[meme_table].extend([operands[beg], operands[beg+1], varmin, I['#='], I['t']])
-			params[meme_table].extend([varmin, operands[beg+3], operands[beg+4], I['#='], I['t']])
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
-
-		elif operators[beg:end] in (LOGIT, LOGIF):
-			if varmin==0: 
-				varmin=aggnum(aid, 'MIN', meme_table)
-				if varmin==0: varmin=I['cor']*-1
-			varmin-=1
-			params[meme_table].extend([operands[beg+2], operands[beg+3], varmin, operands[beg+1], operands[beg]])
+			params[meme_table].extend([operands[beg+1], operands[beg]*-1, varmin, operands[beg+2], operands[beg+3]])
 			params[meme_table].extend([varmin, operands[beg+5], operands[beg+6], operands[beg+7], operands[beg+8]])
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
@@ -820,7 +793,6 @@ def dename(mqry: str):
 		if m: extracted_terms.append(m.group(1))
 		elif term: remaining_terms.append(term)
 
-
 	# Reconstruct the remaining string
 	return ' '.join(remaining_terms), identify(list(set(extracted_terms)))
 
@@ -843,3 +815,176 @@ def read (file_path: str):
 def write (file_path: str, operators: list, operands: list):
 	with open(file_path, 'w', encoding='utf-8') as file:
 		file.write(encode(operators, operands, {'newline':True}))
+
+
+#### CLI ####
+
+# Execute and output an SQL query
+def sql(qry_sql):
+	rows = select(qry_sql, [])
+	for row in rows:
+		print(row)
+
+
+# Search for memes from a memelang query string
+def qry(mqry):
+	operators, operands = decode(mqry)
+	print ("QUERY:    ", encode(operators, operands))
+	print("OPERATORS:", [K[op] for op in operators])
+	print("OPERANDS: ", operands)
+
+	sql, params = querify(mqry, DB_TABLE_MEME, False)
+	params = identify(params)
+	full_sql = morfigy(sql, params)
+	print(f"SQL: {full_sql}\n")
+
+	# Execute query
+	print(f"RESULTS:")
+	memes = get(mqry+' qry[nam]key')
+	out(memes[0], memes[2])
+	print()
+	print()
+
+
+# Read a meme file and save it
+def putfile(file_path):
+	operators, operands = read(file_path)
+	operators, operands = put(operators, operands)
+	out(operators, operands)
+
+
+#### DB ADMIN ####
+
+# Add database and user
+def dbadd():
+	commands = [
+		f"sudo -u postgres psql -c \"CREATE DATABASE {DB_NAME};\"",
+		f"sudo -u postgres psql -c \"CREATE USER {DB_USER} WITH PASSWORD '{DB_PASSWORD}'; GRANT ALL PRIVILEGES ON DATABASE {DB_NAME} to {DB_USER};\"",
+		f"sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {DB_NAME} to {DB_USER};\""
+	]
+
+	for command in commands:
+		print(command)
+		os.system(command)
+
+
+# Add database table
+def tableadd():
+	commands = [
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid BIGINT, rid BIGINT, bid BIGINT, cpr SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_aid_idx ON {DB_TABLE_MEME} (aid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid,bid,str); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
+	]
+
+	for command in commands:
+		print(command)
+		os.system(command)
+
+
+# Delete database table
+def tabledel():
+	commands = [
+		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_MEME};\"",
+		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_NAME};\"",
+	]
+
+	for command in commands:
+		print(command)
+		os.system(command)
+
+
+def qrytest():
+	queries=[
+		'george_washington',
+		'george_washington]',
+		'george_washington[',
+		'george_washington',
+		'george_washington[',
+		'george_washington[]',
+		'george_washington[opt]',
+		'george_washington[birth',
+		'george_washington[birth]',
+		'george_washington[birth[year',
+		'george_washington[birth[year]',
+		'george_washington[birth[year]adyear',
+		'george_washington[birth[[',
+		'george_washington[birth[[]',
+		'george_washington[birth[][]',
+		']adyear',
+		'[year]adyear',
+		'[birth[year]adyear',
+		']adyear=1732',
+		']adyear>=1900',
+		'[year]adyear>1800',
+		'[birth[year]adyear<=2000',
+		'[spouse]',
+		'[spouse] [child]',
+		'[birth[year]adyear>=1800 [birth[year]adyear<1900',
+		'[spouse [child [birth[year]adyear<1900',
+		'george_washington; john_adams',
+		'george_washington;; john_adams;;',
+	]
+	errcnt=0
+
+	for mqry in queries:
+		print('First Query:  ', mqry)
+		operators, operands = decode(mqry)
+		print('Operators:', [K[op] for op in operators])
+		print('Operands:', operands)
+		mqry2 = encode(operators, operands)
+		print('Second Query: ', mqry2)
+		sql, params = querify(mqry, DB_TABLE_MEME, False)
+		print('SQL: ', morfigy(sql, params))
+		c1=count(mqry)
+		c2=count(mqry2)
+		print ('First Count:  ', c1)
+		print ('Second Count: ', c2)
+
+		if not c1 or c1!=c2:
+			print()
+			print('*** COUNT ERROR ABOVE ***')
+			errcnt+=1
+
+		print()
+	print("ERRORS:", errcnt)
+	print()
+
+
+def coreadd():
+	mqry=''
+	for key in I: mqry+=f'{I[key]}[nam]key="{key}";'
+	operators, operands = decode(mqry)
+	put(operators, operands)
+	out(operators, operands)
+
+
+if __name__ == "__main__":
+	LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
+
+	if sys.argv[1] == 'sql': sql(sys.argv[2])
+	elif sys.argv[1] == 'query' or sys.argv[1] == 'qry' or sys.argv[1] == 'q' or sys.argv[1] == 'get' or sys.argv[1] == 'g': qry(sys.argv[2])
+	elif sys.argv[1] == 'file' or sys.argv[1] == 'import': putfile(sys.argv[2])
+	elif sys.argv[1] == 'dbadd' or sys.argv[1] == 'adddb': dbadd()
+	elif sys.argv[1] == 'tableadd' or sys.argv[1] == 'addtable': tableadd()
+	elif sys.argv[1] == 'tabledel' or sys.argv[1] == 'deltable': tabledel()
+	elif sys.argv[1] == 'coreadd' or sys.argv[1] == 'addcore': coreadd()
+	elif sys.argv[1] == 'qrytest': qrytest()
+
+	elif sys.argv[1] == 'install':
+		dbadd()
+		tableadd()
+		coreadd()
+
+	elif sys.argv[1] == 'reinstall':
+		tabledel()
+		tableadd()
+		coreadd()
+		if len(sys.argv)>2 and sys.argv[2]=='-presidents': putfile(LOCAL_DIR+'/presidents.meme')
+
+	elif sys.argv[1] == 'fileall' or sys.argv[1] == 'allfile':
+		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
+		for file in files: putfile(file)
+
+	else:
+		sys.exit("MAIN.PY ERROR: Invalid command");

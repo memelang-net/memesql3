@@ -7,7 +7,7 @@ These Python scripts receive [Memelang v3](https://memelang.net/03/) queries, co
 Memelang traverses a knowledge graph using only three novel operators: 
 * `]` indicates a node
 * `[` indicates an edge
-* `-` "inverses" an edge
+* `-` "inverts" an edge
 
 The basic syntax of Memelang is that some node `A` has some edge relation `R` with some node `B` which equals a true, false, or quantity value `Q`.
 
@@ -36,7 +36,7 @@ Relations are stores in the `meme` table. Each node and edge is given an integer
 	 aid BIGINT, 
 	 rid BIGINT, 
 	 bid BIGINT, 
-	 eql SMALLINT, 
+	 cpr SMALLINT, 
 	 qnt DECIMAL(20,6)
 	);
 
@@ -46,7 +46,7 @@ Relations are stores in the `meme` table. Each node and edge is given an integer
 | aid  | **A** node ID of the relation (john_adams).                                                       |
 | rid  | **R** edge ID (college).                                    |
 | bid  | **B** node ID of the relation (harvard).                                                        |
-| eql  | Operator ID, typically `=`, but can be `<`, `>`, `<=`, etc. |
+| cpr  | Comparison operator ID, typically `=`, but can be `<`, `>`, `<=`, etc. |
 | qnt  | **Quantity** (0 = false, 1 = true, or other numeric values). |
 
 
@@ -68,7 +68,6 @@ String names for nodes and edges are stored in the `name` table:
 ## Files
 
 * *conf.py* database configurations
-* *main.py* CLI interface for queries and testing
 * *memelang.py* library to decode Memelang queries and execute in Postgres
 * *presidents.meme* example Memelang data for the U.S. presidents
 
@@ -88,17 +87,17 @@ Installation on Ubuntu:
 
 	# Configure the conf.py file according for your Postgres settings
 	# Create database and tables
-	sudo python3 ./main.py install
+	sudo python3 ./memelang.py install
 
 	# (Optional) load example presidents data
-	python3 ./main.py file ./presidents.meme
+	python3 ./memelang.py file ./presidents.meme
 
 
 ## Example CLI Usage
 
 Execute a query:
 
-	# python3 ./main.py get "john_adams[college"
+	python3 ./memelang.py get "john_adams[college"
 
 	# Output:
 	john_adams[college]harvard=t
