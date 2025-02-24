@@ -22,7 +22,7 @@ ARB       = [I['@'], I['['], I[']']]
 ARBE      = ARB + [I['==']]
 ARBEQ     = ARBE + [I['.']]
 ARBES     = ARBE + [I['$']]
-IMPL       = [I['['], I[']'], I['=='], I['.'], I['&&'], I['['], I[']'], I['=='], I['.']]
+IMPL      = [I['['], I[']'], I['=='], I['.'], I['&&'], I['['], I[']'], I['=='], I['.']]
 
 # Forms
 NON    = 1.1		# Value has no form, like END
@@ -216,7 +216,6 @@ def decode(mqry: str):
 
 	operators = [I['opr'], I[';']]
 	operands = [I['mix'],SEMILEN]
-	onext = False
 	beg=1
 
 	i = 0
@@ -345,10 +344,15 @@ def encode(operators: list, operands: list, encode_set=None) -> str:
 
 	if encode_set.get('html'): mqry = '<code class="meme">' + mqry + '</code>'
 
-	# FIX LATER
-	mqry = mqry.replace('t#=', 't=').replace('#=t', '=t').replace('1.0=T', 't=').replace('=T1.0', '=t').replace('1.0#=', 't=').replace('#=1.0', '=t').replace(';;', ';')
+	return cleanup(mqry)
 
-	return mqry
+
+def cleanup(mqry: str) -> str:
+	pattern = r'\{(\d+)\}'
+	def lookup(match): return str(K[int(match.group(1))])
+	return re.sub(pattern, lookup, re.sub(r'\s*;;*\s*', ';', mqry)).replace('.000000', '.0').replace('  ', ' ').replace(';', ";\n").replace('#=1.0', '=t').replace('#=0,0', '=f')
+
+
 
 
 def out (operators: list, operands: list):
@@ -374,12 +378,7 @@ def querify(mqry: str, meme_table: str = None, name_table: str = None):
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
 
-	operators, operands = decode(mqry)
-
-	if name_table: 
-		operands = identify(operands, name_table)
-		missings = [x for x in operands if isinstance(x, str)]
-		if missings: raise Exception("Unknown keys: " + ", ".join(missings))
+	operators, operands = decode(identify(mqry))
 
 	ctes    = []
 	selects = []
@@ -411,7 +410,7 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 	beg=o
 	olen=len(operators)
 	while o<olen:
-		if operators[o]==-I['@'] and operands[o]==I['qry']:
+		if operators[o]==I['@'] and operands[o]==I['qry']:
 			qry_set[operands[o+1]]=True
 			skip=True
 
@@ -453,7 +452,7 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 	params   = []
 	cte_sqls = []
 	sel_sqls = []
-	notwhere = None
+	notwhere = ''
 	notparams = []
 
 	# Process NOT groups
@@ -486,7 +485,7 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 	# select all data related to the matching As
 	if qry_set.get(I['all']):
 		qry_select, qry_params = selectify([I['[']], [], meme_table)
-		sel_sqls.append(f"SELECT {qry_select} {from_sql} WHERE m0.aid IN (SELECT a0 FROM z{z})")
+		sel_sqls.append(f"{qry_select} WHERE m0.aid IN (SELECT a0 FROM z{z})")
 
 	# get groups
 	else:
@@ -592,68 +591,79 @@ def aidcache(keys: list, name_table: str = None):
 		K[int(row[0])] = row[2]
 
 
-# Input value is a list of strings ['a', 'b', 'c', 'd']
-# Load key->aid
-# Return the data with any keys with ids
-def identify(operands: list, name_table: str = None):
-	if not name_table: name_table=DB_TABLE_NAME
-	ids = []
-
-	if not operands: return ids
-
+def identify(mqry: str, name_table: str = None):
 	lookups=[]
-	for key in operands:
-		if isinstance(key, str):
-			lookups.append(key if key[0]!='-' else key[1:])
+
+	if not mqry: return mqry
+
+	parts = re.split(r'(?<!\\)"', mqry)
+	for p,part in enumerate(parts):
+		if p%2==1: continue
+		parts[p] = re.split(r'([;\[\]><=\s]+)', re.sub(r'\s*;+\s*', ';', part.strip()))
+		lookups.extend(parts[p])
 
 	aidcache(lookups, name_table)
 
-	for key in operands:
-		if not isinstance(key, str): ids.append(key)
-		elif key[0]=='-':
-			if I.get(key[1:]): ids.append(I[key[1:]]*-1)
-			else: ids.append(key)
-		elif I.get(key): ids.append(I[key])
-		else: ids.append(key)
+	for p,part in enumerate(parts):
+		if not isinstance(part, list): continue
+		for o,operand in enumerate(part):
+			if re.match(r'[a-z]', operand):
+				if operand.startswith('-'): parts[p][o]=str(I[operand[1:]]*-1)
+				else: parts[p][o]=str(I[operand])
 
-	return ids
+		parts[p]=''.join(parts[p])
 
-
-def identify1(val: str, name_table: str = None):
-	if not name_table: name_table=DB_TABLE_NAME
-	ids = identify([val], name_table)
-	return ids[0] if isinstance(ids[0], int) else False
+	return '"'.join(parts)
 
 
-# Input value is a list of ints [123,456,789]
-# Load aid->key
-# Return the data with any aids replaced with keys
-def namify(operands: list, bids: list, name_table: str = None):
-	if not name_table: name_table=DB_TABLE_NAME
-	missings=[]
+def namify(mqry: str, bids: list, name_table: str = None):
+	lookups=[]
 
-	output = {}
-	for bid in bids: output[bid]=[bid]
+	if not mqry: return mqry
 
-	matches = []
-	for i,operand in enumerate(operands):
-		if isinstance(operand, int): matches.append(abs(operands[i]))
+	output={}
+	for b,bid in enumerate(bids):
+		bids[b]=int(bid)
+		output[int(bid)]=[]
 
-	names = selectin({'aid' : matches, 'bid': bids}, name_table)
+	parts = re.split(r'(?<!\\)"', mqry)
+	for p,part in enumerate(parts):
+		if p%2==1: continue
+		parts[p] = re.split(r'([;\[\]><=\s]+)', re.sub(r'\s*;+\s*', ';', part.strip()))
 
+		for operand in parts[p]:
+			if operand.isdigit(): lookups.append(operand)
+			elif operand.startswith('-') and operand[1:].isdigit(): lookups.append(operand[1:])
+
+	names = selectin({'aid' : lookups, 'bid': bids}, name_table)
+	
 	namemap = {}
 	for name in names:
 		if not namemap.get(name[0]): namemap[int(name[0])]={}
 		namemap[int(name[0])][int(name[1])]=name[2]
 
-	for i,operand in enumerate(operands):
-		if i==0: continue
-		for bid in bids:
-			if isinstance(operand, int):
-				oprabs=abs(operand)
-				if namemap.get(oprabs) and namemap[oprabs].get(bid): output[bid].append(('-' if operand<0 else '') + namemap[oprabs][bid])
-				else: output[bid].append(False)
-			else: output[bid].append(operand)
+	for p, part in enumerate(parts):
+		for bid in bids: output[bid].append(part)
+
+		if not isinstance(part, list): continue
+
+		for o, operand in enumerate(part):
+
+			sign=''
+			if operand.startswith('-') and operand[1:].isdigit():
+				operand=operand[1:]
+				sign='-'
+
+			if operand.isdigit():
+				operand=int(operand)
+
+				for bid in bids:
+					if namemap.get(operand) and namemap[operand].get(bid): output[bid][p][o] = sign + namemap[operand][bid]
+					else: output[bid][p][o] = f'\t{operand}NOTFOUND\t'
+
+		for bid in bids: output[bid][p]=''.join(output[bid][p])
+
+	for bid in bids: output[bid]='"'.join(output[bid])
 
 	return list(output.values())
 
@@ -661,16 +671,30 @@ def namify(operands: list, bids: list, name_table: str = None):
 #### PROCESS MEMELANG QUERY FOR SQL QUERY ####
 
 # Input a Memelang query string
-def get(mqry: str, meme_table: str = None, name_table: str = None):
+def get(mqry: str, bid: int = None, meme_table: str = None, name_table: str = None) -> str:
 	if not meme_table: meme_table=DB_TABLE_MEME
 	if not name_table: name_table=DB_TABLE_NAME
-	output=[[], []]
-	mqry, namekeys = dename(mqry)
-	sql, params = querify(mqry, meme_table, name_table)
-	mres = select(sql, params)
-	output[0], output[1] = decode(mres[0][0])
 
-	if namekeys: output.extend(namify(output[1], namekeys, name_table))
+	sql, params = querify(mqry, meme_table, name_table)
+	res = select(sql, params)
+	if not res or not res[0]: return []
+
+	return cleanup(res[0][0] if not bid else namify(res[0][0], [bid], name_table)[0])
+
+# Input a Memelang query string
+def gets(mqry: str, meme_table: str = None, name_table: str = None) -> list[str]:
+	if not meme_table: meme_table=DB_TABLE_MEME
+	if not name_table: name_table=DB_TABLE_NAME
+
+	sql, params = querify(mqry, meme_table, name_table)
+	res = select(sql, params)
+	if not res or not res[0]: return []
+	output = [ res[0][0] ]
+
+	namekeys=[]
+	pattern = r'qry\[nam\]([a-z]+)'
+	for match in re.finditer(pattern, mqry): namekeys.append(identify(match.group(1)))
+	if namekeys: output.extend(namify(output[0], namekeys, name_table))
 
 	return output
 
@@ -678,7 +702,7 @@ def get(mqry: str, meme_table: str = None, name_table: str = None):
 def count(mqry: str, meme_table: str = None, name_table: str = None):
 	sql, params = querify(mqry, meme_table, name_table)
 	mres=select(sql, params)
-	return 0 if not mres else mres[0][0].count(';')
+	return 0 if not mres or not mres[0] or not mres[0][0] else mres[0][0].count(';')
 
 
 def put (operators: list, operands: list, meme_table: str = None, name_table: str = None):
@@ -711,7 +735,7 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 			else: missings[operand]=1
 		o+=1
 
-	# Mark id-key for writing from id]nam]key="xyz"
+	# Mark id-key for writing from id[nam]key="xyz"
 	end=1
 	while (end := nxt(operators, operands, (beg := end))):
 		beg+=1
@@ -781,22 +805,6 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 	return operators, operands
 
 
-# Remove name statement from query
-def dename(mqry: str):
-	terms = re.split(r'[\s\;]+', mqry)
-	remaining_terms = []
-
-	pattern = re.compile(r'^qry\]nam\]([a-z]+)')
-	extracted_terms = []
-	for term in terms:
-		m = pattern.match(term)
-		if m: extracted_terms.append(m.group(1))
-		elif term: remaining_terms.append(term)
-
-	# Reconstruct the remaining string
-	return ' '.join(remaining_terms), identify(list(set(extracted_terms)))
-
-
 #### MEME FILE ####
 
 def read (file_path: str):
@@ -822,8 +830,7 @@ def write (file_path: str, operators: list, operands: list):
 # Execute and output an SQL query
 def sql(qry_sql):
 	rows = select(qry_sql, [])
-	for row in rows:
-		print(row)
+	for row in rows: print(row)
 
 
 # Search for memes from a memelang query string
@@ -834,14 +841,12 @@ def qry(mqry):
 	print("OPERANDS: ", operands)
 
 	sql, params = querify(mqry, DB_TABLE_MEME, False)
-	params = identify(params)
 	full_sql = morfigy(sql, params)
 	print(f"SQL: {full_sql}\n")
 
 	# Execute query
 	print(f"RESULTS:")
-	memes = get(mqry+' qry[nam]key')
-	out(memes[0], memes[2])
+	print(get(mqry, I['key']))
 	print()
 	print()
 
@@ -932,10 +937,13 @@ def qrytest():
 		operators, operands = decode(mqry)
 		print('Operators:', [K[op] for op in operators])
 		print('Operands:', operands)
+
 		mqry2 = encode(operators, operands)
 		print('Second Query: ', mqry2)
-		sql, params = querify(mqry, DB_TABLE_MEME, False)
+		sql, params = querify(mqry)
+
 		print('SQL: ', morfigy(sql, params))
+		
 		c1=count(mqry)
 		c2=count(mqry2)
 		print ('First Count:  ', c1)
