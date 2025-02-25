@@ -138,6 +138,11 @@ STRTOK = {
 }
 
 
+SPLIT_OPERATOR = r'([#;\[\]><=\s])'
+SPLIT_OPERAND = r'([#;\[\]><=\s]+)'
+TFG = ('t', 'f', 'g')
+
+
 #### GENERAL STRINGS #####
 
 # Conbine SQL and parameters into a string
@@ -195,116 +200,105 @@ def selectin(cols: dict = {}, table: str = None):
 
 #### MEMELANG QUERY PARSING ####
 
+def precode(mqry: str) -> str:
+
+	def lookup(match): return str(K[int(match.group(1))])
+
+	mqry = re.sub(r'\s+', ' ', mqry) # Remove multiple spaces
+	mqry = re.sub(r';;+', ';', mqry) # Remove multiple semicolons
+	mqry = re.sub(r'(\.[0-9]*[1-9])0+', r'\1', mqry) # Remove trailing zeros
+	mqry = re.sub(r'\s*([#;!<>=]+)\s*', r'\1', mqry) # Remove spaces around operators
+	mqry = re.sub(r'\{(\d+)\}', lookup, mqry) # Replace {34} with >
+	return mqry.replace('#=1.0', '=t').replace('#=0.0', '=f')
+
+
 # Input: Memelang string operator1operand1operator2operand2
 # Output: [operator1, operator2, ...], [operand1, operand2, ...]
 def decode(mqry: str):
 
-	# Replace multiple spaces with a single space
-	mqry = ' '.join(str(mqry).strip().split())
-
 	# Remove comments
 	mqry = re.sub(r'\s*//.*$', '', mqry, flags=re.MULTILINE)
 
-	# Remove spaces around operators
-	mqry = re.sub(r'\s*([;!<>=]+)\s*', r'\1', mqry)
+	if len(mqry) == 0: raise Exception("Error: Empty query provided.")
 
-	# Append semicolon
-	mqry+=';'
-
-	mqry_len = len(mqry)
-	if mqry_len == 0: raise Exception("Error: Empty query provided.")
+	mqry += ';'
 
 	operators = [I['opr'], I[';']]
 	operands = [I['mix'],SEMILEN]
 	beg=1
 
-	i = 0
-	while i < mqry_len:
-		token = mqry[i]
-
-		# Double-quote string token "George Washtingon's Horse \"Blueskin\""
-		if token == '"':
-			while i < mqry_len-1:
-				i += 1
-				if mqry[i]=='\\': continue
-				token += mqry[i]
-				if mqry[i]== '"' and mqry[i-1]!='\\': break
-
+	parts = re.split(r'(?<!\\)"', mqry)
+	for p,part in enumerate(parts):
+		
+		# quote
+		if p%2==1:
 			operators.append(I['$'])
-			operands.append(token[1:-1])
+			operands.append(part)
 			operands[beg]+=1
-			i += 1
+			continue
 
-		# Operator token
-		elif STRTOK.get(token):
+		tokens = re.split(SPLIT_OPERATOR, precode(part))
+		tlen=len(tokens)
+		t=0
+		while t<tlen:
+			token=tokens[t]
 
-			# Transform "{106}" token to ">="
-			if token == '{':
-				while i < mqry_len-1 and mqry[i]!='}':
-					i += 1
-					token += mqry[i]
-				token=K[int(token[1:-1])]
+			if len(token)==0: pass
 
-			elif STRTOK[token][0]<COMPLETE and i < mqry_len-1 and STRTOK.get(token+mqry[i+1]):
-				token+=mqry[i+1]
-				i+=1
+			# operators
+			elif STRTOK.get(token):
+				completeness, operator, operand = STRTOK[token]
 
-			if not STRTOK.get(token) or STRTOK[token][0] == INCOMPLETE:
-				raise Exception(f"Incomplete operator {token} at {token} in {mqry}")
+				if completeness!=COMPLETE:
+					if t<tlen-3 and STRTOK.get(token+tokens[t+2]):
+						completeness, operator, operand = STRTOK[token+tokens[t+2]]
+						t+=2
+					elif completeness==INCOMPLETE: raise Exception(f"Invalid token {token}")
 
-			completeness, operator, operand = STRTOK[token]
+				if OPR[operator]['aftr']==I['@']:
+					# A[R]B assumes =t
+					if operators[-2]==I['['] and operators[-1]==I[']']:
+						operators.extend([I['=='], I['.']])
+						operands.extend([I['#='], I['t']])
+						operands[beg]+=2
 
-			if OPR[operator]['aftr']==I['@']:
-				if operators[-1]==I[']']:
-					operators.extend([I['=='], I['.']])
-					operands.extend([I['#='], I['t']])
-					operands[beg]+=2
+				# [ and ] are followed by operands
+				elif OPR[operator]['aftr']==STR:
+					operand=tokens[t+1]
+					if operand=='': operand=None
+					elif re.match(r'^-?[0-9]+$', operand): operand=int(operand)
+					t+=1
 
-			if operator==I[';']:
-				# Skip double semicolons ;;
-				if operators[-1]==I[';']:
-					i += 1
-					continue
-				else: beg=len(operators)
-			else: operands[beg]+=1
+				if operator==I[';']: beg=len(operators)
+				else: operands[beg]+=1
 
-			operators.append(operator)
-			operands.append(operand)
-			i += 1
-
-		# key/int/float token
-		else:
-			m = re.match(r'[a-z0-9\_\.\-]+', mqry[i:])
-			if not m: raise Exception(f"Memelang decode error: Unexpected '{mqry[i]}' at char {i} in {mqry}")
-
-			operator=I['?']
-			if OPR[operators[-1]]['aftr']: operator=OPR[operators[-1]]['aftr']
-
-			# format
-			operand = m.group()
-			if operand in ('f','t','g'): 
-				operand=I[operand]
-				operator=I['.']
-				if operators[-1]==I['==']: operands[-1]=I['#=']
-				else: raise Exception('True/float error')
-
-			elif '.' in operand:
-				operand=float(operand)
-				operator=I['.']
-			elif re.match(r'^-?[0-9]+$', operand):
-				operand=int(operand)
-
-			if OPR[operators[-1]]['aftr']==STR: operands[-1]=operand
-			else:
 				operators.append(operator)
 				operands.append(operand)
-				operands[beg]+=1
 
-			i += len(m.group())
+			# string/int/float
+			else:
+				if not re.match(r'[a-z0-9]', token):
+					raise Exception(f"Unexpected '{token}' in {mqry}")
+
+				if token in TFG: 
+					token=I[token]
+					if operators[-1]==I['==']: operands[-1]=I['#=']
+					else: raise Exception('sequence error')
+
+				elif '.' in token: token=float(token)
+
+				elif re.match(r'^-?[0-9]+$', token): token=int(token)
+
+				if OPR[operators[-1]]['aftr'] in (I['@'], I['.']): operator=OPR[operators[-1]]['aftr']
+				else: raise Exception(f'sequence error {operators[-1]} {token}')
+
+				operators.append(operator)
+				operands.append(token)
+				operands[beg]+=1
+			t+=1
 
 	operators.pop()
 	operands.pop()
-
 	return operators, operands
 
 
@@ -319,24 +313,12 @@ def encode(operators: list, operands: list, encode_set=None) -> str:
 		if o<2: continue
 		expression=''
 		for fld in OPR[operator]['out']:
-			if fld == FLT:
-				sign = '-' if operands[o] < 0 else ''
-				ones = str(abs(operands[o]))
-				tenths = ''
-				if '.' in ones: ones, tenths = ones.split('.')
-				operand = sign + (ones.lstrip('0') or '0') + '.' + (tenths.rstrip('0') or '0')
-
+			if fld == FLT: operand = operands[o]
 			elif fld == STR: operand = '' if operands[o] is None else operands[o]
-
-			elif fld == AID:
-				if isinstance(operands[o], int): operand = K[operands[o]]
-				else: operand = operands[o]
-
+			elif fld == AID: operand = operands[o] if not isinstance(operands[o], int) else K[operands[o]]
 			else: operand=fld
 
 			expression+=str(operand)
-
-		if operator == I[';'] and encode_set.get('newline'): expression+="\n"
 
 		# Append the encoded expression
 		if encode_set.get('html'): mqry += '<var class="v' + str(operator) + '">' + html.escape(expression) + '</var>'
@@ -344,15 +326,7 @@ def encode(operators: list, operands: list, encode_set=None) -> str:
 
 	if encode_set.get('html'): mqry = '<code class="meme">' + mqry + '</code>'
 
-	return cleanup(mqry)
-
-
-def cleanup(mqry: str) -> str:
-	pattern = r'\{(\d+)\}'
-	def lookup(match): return str(K[int(match.group(1))])
-	return re.sub(pattern, lookup, re.sub(r'\s*;;*\s*', ';', mqry)).replace('.000000', '.0').replace('  ', ' ').replace(';', ";\n").replace('#=1.0', '=t').replace('#=0,0', '=f')
-
-
+	return precode(mqry)
 
 
 def out (operators: list, operands: list):
@@ -394,6 +368,7 @@ def querify(mqry: str, meme_table: str = None, name_table: str = None):
 		params.extend(param)
 
 	return ['WITH ' + ', '.join(ctes) + " SELECT string_agg(arbeq, '') AS arbeq FROM (" + ' UNION '.join(selects) + ')', params]
+
 
 # Input: operators and operands for one Memelang command
 # Output: One SQL query string
@@ -452,8 +427,8 @@ def subquerify(operators: list, operands: list, meme_table: str = None, cte_beg:
 	params   = []
 	cte_sqls = []
 	sel_sqls = []
-	notwhere = ''
 	notparams = []
+	notwhere = ''
 
 	# Process NOT groups
 	if false_cnt:
@@ -522,6 +497,11 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 		form = OPR[operator]['form']
 		dcol = OPR[operator]['dcol']
 
+		if dcol == 'cpr':
+			cpr=K[int(operand)]
+			print('set cpr',cpr, operators, operands)
+			continue
+
 		# New row
 		if (operator == I[']'] and prev_operator==I[']']) or (operator == I['['] and prev_operator in (I['['], I[']'])):
 			m+=1
@@ -534,11 +514,7 @@ def selectify(operators: list, operands: list, meme_table=None, aidOnly=False):
 
 		prev_operator = operator
 
-		if dcol == 'cpr':
-			cpr=K[int(operand)]
-			continue
-	
-		elif dcol and operand is not None:
+		if dcol and operand is not None:
 			if form in (INT, AID): operand=int(operand)
 			elif form == FLT: operand=float(operand)
 			else: raise Exception('invalid form')
@@ -580,7 +556,7 @@ def aidcache(keys: list, name_table: str = None):
 	if not name_table: name_table=DB_TABLE_NAME
 	if not keys: return
 
-	uncached_keys = [key for key in keys if isinstance(key, str) and key not in I]
+	uncached_keys = list(set([key for key in keys if isinstance(key, str) and key not in I]))
 
 	if not uncached_keys: return
 
@@ -599,7 +575,7 @@ def identify(mqry: str, name_table: str = None):
 	parts = re.split(r'(?<!\\)"', mqry)
 	for p,part in enumerate(parts):
 		if p%2==1: continue
-		parts[p] = re.split(r'([;\[\]><=\s]+)', re.sub(r'\s*;+\s*', ';', part.strip()))
+		parts[p] = re.split(SPLIT_OPERAND, part)
 		lookups.extend(parts[p])
 
 	aidcache(lookups, name_table)
@@ -607,6 +583,7 @@ def identify(mqry: str, name_table: str = None):
 	for p,part in enumerate(parts):
 		if not isinstance(part, list): continue
 		for o,operand in enumerate(part):
+			if operand in TFG: continue
 			if re.match(r'[a-z]', operand):
 				if operand.startswith('-'): parts[p][o]=str(I[operand[1:]]*-1)
 				else: parts[p][o]=str(I[operand])
@@ -629,7 +606,7 @@ def namify(mqry: str, bids: list, name_table: str = None):
 	parts = re.split(r'(?<!\\)"', mqry)
 	for p,part in enumerate(parts):
 		if p%2==1: continue
-		parts[p] = re.split(r'([;\[\]><=\s]+)', re.sub(r'\s*;+\s*', ';', part.strip()))
+		parts[p] = re.split(SPLIT_OPERAND, part)
 
 		for operand in parts[p]:
 			if operand.isdigit(): lookups.append(operand)
@@ -677,9 +654,8 @@ def get(mqry: str, bid: int = None, meme_table: str = None, name_table: str = No
 
 	sql, params = querify(mqry, meme_table, name_table)
 	res = select(sql, params)
-	if not res or not res[0]: return []
+	return [] if not res or not res[0] else precode(res[0][0] if not bid else namify(res[0][0], [bid], name_table)[0])
 
-	return cleanup(res[0][0] if not bid else namify(res[0][0], [bid], name_table)[0])
 
 # Input a Memelang query string
 def gets(mqry: str, meme_table: str = None, name_table: str = None) -> list[str]:
@@ -689,7 +665,7 @@ def gets(mqry: str, meme_table: str = None, name_table: str = None) -> list[str]
 	sql, params = querify(mqry, meme_table, name_table)
 	res = select(sql, params)
 	if not res or not res[0]: return []
-	output = [ res[0][0] ]
+	output = [ precode(res[0][0]) ]
 
 	namekeys=[]
 	pattern = r'qry\[nam\]([a-z]+)'
@@ -784,7 +760,7 @@ def put (operators: list, operands: list, meme_table: str = None, name_table: st
 
 		elif operators[beg:end]==IMPL and operands[beg+4]==I['>>']:
 			if varmin==0: 
-				varmin=aggnum(aid, 'MIN', meme_table)
+				varmin=aggnum('aid', 'MIN', meme_table)
 				if varmin==0: varmin=I['cor']*-1
 			varmin-=1
 			params[meme_table].extend([operands[beg+1], operands[beg]*-1, varmin, operands[beg+2], operands[beg+3]])
@@ -917,6 +893,7 @@ def qrytest():
 		'george_washington[birth[[]',
 		'george_washington[birth[][]',
 		']adyear',
+		']adyear=t',
 		'[year]adyear',
 		'[birth[year]adyear',
 		']adyear=1732',
@@ -933,15 +910,18 @@ def qrytest():
 	errcnt=0
 
 	for mqry in queries:
-		print('First Query:  ', mqry)
 		operators, operands = decode(mqry)
 		print('Operators:', [K[op] for op in operators])
 		print('Operands:', operands)
 
-		mqry2 = encode(operators, operands)
-		print('Second Query: ', mqry2)
-		sql, params = querify(mqry)
+		print('Query 1:  ', mqry)
 
+		for i in range(2,5):
+			mqry2 = encode(operators, operands)
+			operators, operands = decode(mqry2)
+			print(f'Query {i}: ', mqry2)
+
+		sql, params = querify(mqry)
 		print('SQL: ', morfigy(sql, params))
 		
 		c1=count(mqry)
