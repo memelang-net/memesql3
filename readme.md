@@ -16,10 +16,10 @@ The basic syntax of Memelang is that some node `A` has some edge relation `R` wi
 	# "It is true that John Adams attended Harvard"
 	john_adams[college]harvard=t
 
-	# List all relations (edges and connected nodes) of John Adams
+	# List all relations (edges) for John Adams
 	john_adams
 
-	# List all colleges that John Adams attended
+	# List all colleges (nodes) that John Adams attended
 	john_adams[college]
 
 	# List all people (nodes) that attended Harvard
@@ -85,7 +85,7 @@ Installation on Ubuntu:
 	git clone https://github.com/memelang-net/memesql3.git memesql
 	cd memesql
 
-	# Configure the conf.py file according for your Postgres settings
+	# Configure the conf.py file according to your Postgres settings
 	# Create database and tables
 	sudo python3 ./memelang.py install
 
