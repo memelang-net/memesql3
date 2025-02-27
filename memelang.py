@@ -133,8 +133,7 @@ STROPR = {
 	">>" : [COMPLETE, I['&&'], I['>>']],
 }
 
-SPLIT_OPERATOR = r'([#;\[\]><=\s])'
-SPLIT_OPERAND = r'([#;\[\]><=\s]+)'
+SPLITOPR = r'([#;\[\]><=\s])'
 TFG = ('t', 'f', 'g')
 
 
@@ -191,7 +190,7 @@ def decode(memestr: str) -> list:
 			tokens[beg]+=1
 			continue
 
-		strtoks = re.split(SPLIT_OPERATOR, precode(part))
+		strtoks = re.split(SPLITOPR, precode(part))
 		tlen = len(strtoks)
 		t = 0
 		while t<tlen:
@@ -301,7 +300,7 @@ def tokfit (atoks: list, btoks):
 #### POSTGRES HELPERS #####
 
 def select(query: str, params: list = []):
-	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
+	conn_str = f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}"
 	with psycopg2.connect(conn_str) as conn:
 		cursor = conn.cursor()
 		cursor.execute(query, params)
@@ -310,20 +309,20 @@ def select(query: str, params: list = []):
 
 
 def insert(query: str, params: list = []):
-	conn_str = f"host={DB_HOST} dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD}"
+	conn_str = f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}"
 	with psycopg2.connect(conn_str) as conn:
 		cursor = conn.cursor()
 		cursor.execute(query, params)
 
 
 def aggnum(col: str = 'aid', agg: str = 'MAX', table: str = None):
-	if not table: table=DB_TABLE_MEME
+	if not table: table=DB['table_meme']
 	result = select(f"SELECT {agg}({col}) FROM {table}")
 	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
 
 
 def selectin(cols: dict = {}, table: str = None):
-	if not table: table=DB_TABLE_NAME
+	if not table: table=DB['table_name']
 
 	conds = []
 	params = []
@@ -345,7 +344,7 @@ def selectin(cols: dict = {}, table: str = None):
 # K[123]='john_adams'
 def namecache(toks: list, fld: str = 'str', name_table: str = None):
 	if not toks: return
-	if not name_table: name_table=DB_TABLE_NAME
+	if not name_table: name_table=DB['table_name']
 
 	if fld=='str': uncaches = list(set([tok for tok in toks if isinstance(tok, str) and tok not in I]))
 	elif fld=='aid': uncaches = list(set([tok for tok in toks if isinstance(tok, int) and tok not in K]))
@@ -406,12 +405,9 @@ def keyify(tokens: list, name_table: str = None) -> list:
 # Input: Memelang query string
 # Output: SQL query string
 
-# I stumbled onto something profound here.
-# Memelang input generates Memelang output.
-
 def querify(tokens: list, meme_table: str = None, name_table: str = None):
-	if not meme_table: meme_table=DB_TABLE_MEME
-	if not name_table: name_table=DB_TABLE_NAME
+	if not meme_table: meme_table=DB['table_meme']
+	if not name_table: name_table=DB['table_name']
 
 	ctes    = []
 	selects = []
@@ -432,8 +428,8 @@ def querify(tokens: list, meme_table: str = None, name_table: str = None):
 # Input: tokens
 # Output: One SQL query string
 def subquerify(tokens: list, meme_table: str = None, cte_beg: int = 0):
-	if not meme_table: meme_table=DB_TABLE_MEME
-	qry_set = {'all': False, 'of': False}
+	if not meme_table: meme_table=DB['table_meme']
+	qry_set = {I['all']: False}
 	groups={'false':{0:[]},'get':{0:[]}, 'true':{}}
 
 	skip = False
@@ -537,11 +533,11 @@ def subquerify(tokens: list, meme_table: str = None, cte_beg: int = 0):
 # Input: tokens
 # Output: SELECT string, FROM string, WHERE string, and depth int
 def selectify(tokens: list, meme_table=None, aidOnly=False):
-	if not meme_table: meme_table=DB_TABLE_MEME
+	if not meme_table: meme_table=DB['table_meme']
 
 	ROWLEN=SEMILEN+5
 	qparts = {
-		'select': [f"(aid0) AS a0", f"concat_ws(' ', {I[';']}, ROWLEN, {I['@']}, (aid0), {I['[']}, (rid0)"],
+		'select': [f"(aid0) AS a0", f"concat_ws(' ', ';', ROWLEN, {I['@']}, (aid0), {I['[']}, (rid0)"],
 		'join': [f" FROM {meme_table} m0"],
 		'where': []
 	}
@@ -564,9 +560,9 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 
 		else:
 			# New row
-			if (operator == I[']'] and prev_operator==I[']']) or (operator == I['['] and prev_operator in (I['['], I[']'])):
+			if o>=2 and ((operator == I[']'] and tokens[o-2]==I[']']) or (operator == I['['] and tokens[o-2] in (I['['], I[']']))):
 				m+=1
-				if prev_operator==I[']']:
+				if tokens[-2]==I[']']:
 					qparts['select'][1] += f", {I[']']}, (bid{m-1})"
 					ROWLEN+=1
 					
@@ -578,8 +574,6 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 
 			# Inversion
 			if operator == I['['] and operand is not None and operand<0: inversions[m]=True
-
-			prev_operator = operator
 
 			if dcol and operand is not None:
 				if form in (INT, AID): operand=int(operand)
@@ -624,11 +618,12 @@ def query(memestr: str, bid: int = None, meme_table: str = None, name_table: str
 	res = select(sql, params)
 	if not res or not res[0]: return []
 
-	strtoks=res[0][0].split()
 	tokens=[I['id'], I['id']]
 
+	strtoks=res[0][0].split()
 	for tok in strtoks:
 		if tok == '': continue
+		elif tok==';': tokens.append(I[';'])
 		elif '.' in tok: tokens.append(float(tok))
 		else: tokens.append(int(tok))
 
@@ -641,14 +636,13 @@ def count(memestr: str, meme_table: str = None, name_table: str = None):
 	tokens = identify(decode(memestr), name_table)
 	sql, params = querify(tokens, meme_table, name_table)
 	mres=select(sql, params)
-	return 0 if not mres or not mres[0] or not mres[0][0] else mres[0][0].count(f" {I[';']} ")+1
+	return 0 if not mres or not mres[0] or not mres[0][0] else mres[0][0].count(';')+1
 
 
 def put (tokens: list, meme_table: str = None, name_table: str = None):
-	if not meme_table: meme_table=DB_TABLE_MEME
-	if not name_table: name_table=DB_TABLE_NAME
+	if not meme_table: meme_table=DB['table_meme']
+	if not name_table: name_table=DB['table_name']
 
-	# Load IDs
 	namecache(tokens, 'str', name_table)
 
 	missings = {}
@@ -854,9 +848,9 @@ def qrytest():
 # Add database and user
 def dbadd():
 	commands = [
-		f"sudo -u postgres psql -c \"CREATE DATABASE {DB_NAME};\"",
-		f"sudo -u postgres psql -c \"CREATE USER {DB_USER} WITH PASSWORD '{DB_PASSWORD}'; GRANT ALL PRIVILEGES ON DATABASE {DB_NAME} to {DB_USER};\"",
-		f"sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {DB_NAME} to {DB_USER};\""
+		f"sudo -u postgres psql -c \"CREATE DATABASE {DB['name']};\"",
+		f"sudo -u postgres psql -c \"CREATE USER {DB['user']} WITH PASSWORD '{DB['pswd']}'; GRANT ALL PRIVILEGES ON DATABASE {DB['name']} to {DB['user']};\"",
+		f"sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {DB['name']} to {DB['user']};\""
 	]
 
 	for command in commands:
@@ -867,10 +861,10 @@ def dbadd():
 # Add database table
 def tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_MEME} (aid BIGINT, rid BIGINT, bid BIGINT, cpr SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB_TABLE_MEME}_aid_idx ON {DB_TABLE_MEME} (aid,rid,bid); CREATE INDEX {DB_TABLE_MEME}_rid_idx ON {DB_TABLE_MEME} (rid); CREATE INDEX {DB_TABLE_MEME}_bid_idx ON {DB_TABLE_MEME} (bid);\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"CREATE TABLE {DB_TABLE_NAME} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB_TABLE_NAME}_aid_idx ON {DB_TABLE_NAME} (aid,bid,str); CREATE INDEX {DB_TABLE_NAME}_str_idx ON {DB_TABLE_NAME} (str);\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_MEME} TO {DB_USER};\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB_TABLE_NAME} TO {DB_USER};\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_meme']} (aid BIGINT, rid BIGINT, bid BIGINT, cpr SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB['table_meme']}_aid_idx ON {DB['table_meme']} (aid,rid,bid); CREATE INDEX {DB['table_meme']}_rid_idx ON {DB['table_meme']} (rid); CREATE INDEX {DB['table_meme']}_bid_idx ON {DB['table_meme']} (bid);\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_name']} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB['table_name']}_aid_idx ON {DB['table_name']} (aid,bid,str); CREATE INDEX {DB['table_name']}_str_idx ON {DB['table_name']} (str);\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB['table_meme']} TO {DB['user']};\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB['table_name']} TO {DB['user']};\"",
 	]
 
 	for command in commands:
@@ -881,8 +875,8 @@ def tableadd():
 # Delete database table
 def tabledel():
 	commands = [
-		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_MEME};\"",
-		f"sudo -u postgres psql -d {DB_NAME} -c \"DROP TABLE {DB_TABLE_NAME};\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"DROP TABLE {DB['table_meme']};\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"DROP TABLE {DB['table_name']};\"",
 	]
 	for command in commands:
 		print(command)

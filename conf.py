@@ -1,11 +1,13 @@
 
-# Database configuration constants
-DB_HOST = 'localhost'  # Host for MySQL/Poseqres
-DB_USER = 'memeuser'  # Username for MySQL/Poseqres
-DB_PASSWORD = 'memepswd'  # Password for MySQL/Poseqres
-DB_NAME = 'memedb'  # Database name for MySQL/Poseqres
-DB_TABLE_MEME='meme'
-DB_TABLE_NAME='name'
+# Database configurations
+DB = {
+	'host' : 'localhost',   # Host for Poseqres
+	'user' : 'memeuser',    # Username for Poseqres
+	'pswd' : 'memepswd',    # Password for Poseqres
+	'name' : 'memedb',      # Database name for Poseqres
+	'table_meme' :'meme',
+	'table_name' :'name'
+}
 
 # Global dictionary to cache key->id mappings
 I = {
@@ -14,43 +16,40 @@ I = {
 	't'   : 1,
 	'g'   : 2,
 
-	'?'   : 4,
-	'@'   : 5,
-	'['   : 6,
-	']'   : 7,
-	'=='  : 8,
-	'$'   : 9,
-	'.'   : 10,
-	'#'   : 11,
-	'||'  : 12,
-	'&&'  : 13,
+	'@'   : 4,
+	'['   : 5,
+	']'   : 6,
+	'=='  : 7,
+	'$'   : 8,
+	'.'   : 9,
+	'#'   : 10,
+	'||'  : 11,
+	'&&'  : 12,
 
 	';'   : 15,
 
-	'#='  : 32,
-	'='   : 33,
-	'>'   : 34,
-	'<'   : 35,
-	'>='  : 36,
-	'<='  : 37,
-	'!='  : 38,
+	'#='  : 16,
+	'='   : 17,
+	'>'   : 18,
+	'<'   : 19,
+	'>='  : 20,
+	'<='  : 21,
+	'!='  : 22,
 
-	' '   : 40,
-	'>>'  : 50,
+	' '   : 27,
+	'>>'  : 28,
 
 	'qry' : 200,
 	'nam' : 201,
-	'opr' : 202,
-	'id'  : 203,
-	'key' : 204,
-	'tit' : 205,
-	'is'  : 206,
-	'of'  : 207,
-	'unk' : 208,
-	'all' : 209,
-	'mix' : 210,
+	'id'  : 202,
+	'key' : 203,
+	'tit' : 204,
+	'of'  : 205,
+	'all' : 206,
+	'mix' : 207,
 
-	'cor'  : 999999
+	'cor'  : 9999999
 }
 
+# Lazy population for now
 K = {value: key for key, value in I.items()}
