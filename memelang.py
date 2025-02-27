@@ -2,31 +2,30 @@ import sys
 import os
 import re
 import glob
-import html
 import psycopg2
 from conf import *
 
-#### SETUP ####
-# These are settings for handling Memelang queries. Encoding 
-# these in variables makes them overly explicit, but reduces
-# encoding them in if/else logic in the later functions.
+###############################################################################
+#                           CONSTANTS & GLOBALS
+###############################################################################
 
 # Column order
 A         = 1
 R         = 3
 B         = 5
-E         = 7
+C         = 7
 Q         = 9
 
 SEMILEN   = 0.5
 THEBEG    = 4
+ODD       = 1
+EVEN      = 2
+ALL       = 4
 
 # Forms
-NON    = 1.1		# Value has no form, like END
-INT    = 1.2		# Value is integer, like True, False, Get
-FLT    = 1.3		# Value is decimal number
-AID    = 1.4		# Value is an ID integer
-STR    = 1.5		# Value is a string
+FLT    = 1.1	# Value is decimal number
+AID    = 1.2	# Value is an ID integer
+STR    = 1.3	# Value is a string
 
 # Each operator and its meaning
 OPR = {
@@ -54,14 +53,6 @@ OPR = {
 		'out'  : ['[', STR],
 		'aftr' : STR,
 	},
-	I['==']: {
-		'form' : AID,
-		'dcol' : 'cpr',
-		'icol' : 'cpr',
-		'dval' : I['#='],
-		'out'  : [AID],
-		'aftr' : I['.'],
-	},
 	I['.']: {
 		'form' : FLT,
 		'dcol' : 'qnt',
@@ -79,35 +70,60 @@ OPR = {
 		'aftr' : None,
 	},
 	I['||']: {
-		'form' : INT,
+		'form' : FLT,
 		'dcol' : None,
 		'icol' : None,
 		'dval' : None,
 		'out'  : [''],
 		'aftr' : None,
 	},
+	I['==']: {
+		'form' : AID,
+		'dcol' : 'cpr',
+		'icol' : 'cpr',
+		'dval' : I['#='],
+		'out'  : [AID],
+		'aftr' : I['.'],
+	},
 	I['&&']: {
 		'form' : AID,
 		'dcol' : None,
 		'icol' : None,
 		'dval' : I[' '],
-		'out'  : [' ',AID,' '],
+		'out'  : [AID],
 		'aftr' : I['@'],
 	},
 	I[';']: {
-		'form' : NON,
+		'form' : None,
 		'dcol' : None,
 		'icol' : None,
 		'dval' : SEMILEN,
 		'out'  : [';'],
 		'aftr' : I['@'],
 	},
-	I['id']: { # Actually starts operators, treat as close of non-existant prior statement
-		'form' : NON,
+	# Placeholders to avoid key error
+	I['id']: {
+		'form' : None,
+		'dcol' : None,
+		'icol' : None,
+		'dval' : I['id'],
+		'out'  : [None],
+		'aftr' : None,
+	},
+	I['mix']: {
+		'form' : None,
 		'dcol' : None,
 		'icol' : None,
 		'dval' : I['mix'],
-		'out'  : [''],
+		'out'  : [None],
+		'aftr' : None,
+	},
+	I['key']: {
+		'form' : None,
+		'dcol' : None,
+		'icol' : None,
+		'dval' : I['key'],
+		'out'  : [None],
 		'aftr' : None,
 	},
 }
@@ -133,11 +149,48 @@ STROPR = {
 	">>" : [COMPLETE, I['&&'], I['>>']],
 }
 
-SPLITOPR = r'([#;\[\]><=\s])'
+SPLITOPR = r'([#;\[\]!><=\s])'
 TFG = ('t', 'f', 'g')
 
 
-#### GENERAL STRINGS #####
+###############################################################################
+#                        DATABASE HELPER FUNCTIONS
+###############################################################################
+
+def select(query: str, params: list = []) -> list:
+	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}") as conn:
+		cursor = conn.cursor()
+		cursor.execute(query, params)
+		rows=cursor.fetchall()
+		return [list(row) for row in rows]
+
+
+def insert(query: str, params: list = []):
+	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}") as conn:
+		cursor = conn.cursor()
+		cursor.execute(query, params)
+
+
+def aggnum(col: str = 'aid', agg: str = 'MAX', table: str = None) -> int:
+	if not table: table=DB['table_meme']
+	result = select(f"SELECT {agg}({col}) FROM {table}")
+	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
+
+
+def selectin(cols: dict = {}, table: str = None) -> list:
+	if not table: table=DB['table_name']
+
+	conds = []
+	params = []
+
+	for col in cols:
+		conds.append(f"{col} IN ("+ ','.join(['%s'] * len(cols[col])) +")")
+		params.extend(cols[col])
+
+	if not conds: return []
+
+	return select(f"SELECT DISTINCT aid, bid, str FROM {table} WHERE " + ' AND '.join(conds), params)
+
 
 # Conbine SQL and parameters into a string
 def morfigy(sql: str, params: list) -> str:
@@ -153,18 +206,33 @@ def slugify(string: str) -> str:
 	return re.sub(r'__+', '_', re.sub(r'[^a-z0-9]', '_', string.lower())).strip('_')
 
 
-#### MEMELANG STRING PARSING ####
+###############################################################################
+#                       MEMELANG STRING PROCESSING
+###############################################################################
 
-def precode(memestr: str, newline=False) -> str:
-	memestr = re.sub(r'\n+', ';', memestr) # Newlines are semicolons
-	memestr = re.sub(r'\s+', ' ', memestr) # Remove multiple spaces
-	memestr = re.sub(r'(\.[0-9][1-9]*)0+', r'\1', memestr) # Remove trailing zeros
-	memestr = re.sub(r'\s*([#;!<>=]+)\s*', r'\1', memestr) # Remove spaces around operators
-	memestr = re.sub(r';;+', ';', memestr) # Remove multiple semicolons
+# Input: Memelang string
+# Output: list of normalized Memelang strings, which should be joined by double quote (")
+# This splits by quotes so quoted string aren't altered
+def normalize(memestr: str, newline = False) -> list[str]:
 
-	if newline: memestr = memestr.replace(";", ";\n")
+	parts = re.split(r'(?<!\\)"', memestr)
+	for p,part in enumerate(parts):
 
-	return memestr.replace('#=1;', '=t;').replace('#=1.0;', '=t;').replace('#=0.0;', '=f;')
+		# quote
+		if p%2==1:
+			parts[p]=part
+			continue
+
+		# memelang code
+		part = re.sub(r'[;\n]+', ';', part) # Newlines are semicolons
+		part = re.sub(r'\s+', ' ', part) # Remove multiple spaces
+		part = re.sub(r'\s*([#;!<>=]+)\s*', r'\1', part) # Remove spaces around operators
+		part = re.sub(r'(\.[0-9][1-9]*)0+', r'\1', part) # Remove trailing zeros
+
+		if newline: part = part.replace(";", ";\n")
+		parts[p]=part.replace('#=1;', '=t;').replace('#=1.0;', '=t;').replace('#=0.0;', '=f;')
+
+	return parts
 
 
 # Input: Memelang string "operator1operand1operator2operand2"
@@ -176,12 +244,11 @@ def decode(memestr: str) -> list:
 
 	if len(memestr) == 0: raise Exception("Error: Empty query provided.")
 
-	memestr += ';'
-
 	tokens = [I['id'], I['mix'], I[';'], SEMILEN]
 	beg=3
 
-	parts = re.split(r'(?<!\\)"', memestr)
+	parts = normalize(memestr+';')
+
 	for p,part in enumerate(parts):
 		
 		# quote
@@ -190,7 +257,7 @@ def decode(memestr: str) -> list:
 			tokens[beg]+=1
 			continue
 
-		strtoks = re.split(SPLITOPR, precode(part))
+		strtoks = re.split(SPLITOPR, part)
 		tlen = len(strtoks)
 		t = 0
 		while t<tlen:
@@ -255,29 +322,19 @@ def decode(memestr: str) -> list:
 # Input: tokens [operator1, operand1, operator2, operand2, ...]
 # Output: Memelang string "operator1operand1operator2operand2"
 def encode(tokens: list, encode_set=None) -> str:
-
 	if not encode_set: encode_set={}
 	memestr = ''
 
 	o=THEBEG
 	olen=len(tokens)
 	while o<olen:
-		expression=''
 		for fld in OPR[tokens[o]]['out']:
-			if fld == FLT:   expression += str(tokens[o+1])
-			elif fld == STR: expression += '' if tokens[o+1] is None else str(tokens[o+1])
-			elif fld == AID: expression += str(tokens[o+1]) if not isinstance(tokens[o+1], int) else K[tokens[o+1]]
-			else:            expression += str(fld)
-
-		# Append the encoded expression
-		if encode_set.get('html'): memestr += '<var class="v' + str(tokens[o]) + '">' + html.escape(expression) + '</var>'
-		else: memestr += expression
-
+			if fld in (FLT, STR): memestr += '' if tokens[o+1] is None else str(tokens[o+1])
+			elif fld == AID: memestr += '' if tokens[o+1] is None else  str(K[tokens[o+1]])
+			else: memestr += str(fld)
 		o+=2
 
-	if encode_set.get('html'): memestr = '<code class="meme">' + memestr + '</code>'
-
-	return precode(memestr, encode_set.get('newline'))
+	return '"'.join(normalize(memestr, encode_set.get('newline')))
 
 
 # Jump to next statement in tokens
@@ -290,64 +347,27 @@ def nxt(tokens: list, beg: int = 2):
 
 # Do these statements match?
 # False is wildcard
-def tokfit (atoks: list, btoks):
+def tokfit (atoks: list, btoks: list) -> bool:
 	if len(atoks)!=len(btoks): return False
 	for p, btok in enumerate(btoks):
 		if btok!=False and atoks[p]!=btok: return False
 	return True
 
 
-#### POSTGRES HELPERS #####
-
-def select(query: str, params: list = []):
-	conn_str = f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}"
-	with psycopg2.connect(conn_str) as conn:
-		cursor = conn.cursor()
-		cursor.execute(query, params)
-		rows=cursor.fetchall()
-		return [list(row) for row in rows]
-
-
-def insert(query: str, params: list = []):
-	conn_str = f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}"
-	with psycopg2.connect(conn_str) as conn:
-		cursor = conn.cursor()
-		cursor.execute(query, params)
-
-
-def aggnum(col: str = 'aid', agg: str = 'MAX', table: str = None):
-	if not table: table=DB['table_meme']
-	result = select(f"SELECT {agg}({col}) FROM {table}")
-	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
-
-
-def selectin(cols: dict = {}, table: str = None):
-	if not table: table=DB['table_name']
-
-	conds = []
-	params = []
-
-	for col in cols:
-		conds.append(f"{col} IN ("+ ','.join(['%s'] * len(cols[col])) +")")
-		params.extend(cols[col])
-
-	if not conds: return []
-
-	return select(f"SELECT DISTINCT aid, bid, str FROM {table} WHERE " + ' AND '.join(conds), params)
-
-
-#### KEY-ID CONVERSION ####
+###############################################################################
+#                           KEY <-> ID CONVERSIONS
+###############################################################################
 
 # Input list of key strings ['george_washington', 'john_adams']
 # Load key->aids in I and K caches
 # I['john_adams']=123
 # K[123]='john_adams'
-def namecache(toks: list, fld: str = 'str', name_table: str = None):
-	if not toks: return
+def namecache(tokens: list, fld: str = 'str', name_table: str = None):
+	if not tokens: return
 	if not name_table: name_table=DB['table_name']
 
-	if fld=='str': uncaches = list(set([tok for tok in toks if isinstance(tok, str) and tok not in I]))
-	elif fld=='aid': uncaches = list(set([tok for tok in toks if isinstance(tok, int) and tok not in K]))
+	if fld=='str': uncaches = list(set([tok for tok in tokens if isinstance(tok, str) and tok not in I]))
+	elif fld=='aid': uncaches = list(set([tok for tok in tokens if isinstance(tok, int) and tok not in K]))
 	else: raise Exception('fld')
 
 	if not uncaches: return
@@ -359,53 +379,54 @@ def namecache(toks: list, fld: str = 'str', name_table: str = None):
 		K[int(row[0])] = row[2]
 
 
-def identify(tokens: list = [], name_table: str = None) -> list:
+def identify(tokens: list = [], mode: int = ALL, name_table: str = None) -> list:
 	lookups=[]
 	tokids=[]
 
 	if not tokens: return tokens
 
-	for tok in tokens:
-		if not isinstance(tok, str): continue
+	for t,tok in enumerate(tokens):
+		if not isinstance(tok, str) or (mode==ODD and t%2==0) or (mode==EVEN and t%2==1): continue
 		if tok.startswith('-'): tok = tok[1:]
 		if not I.get(tok): lookups.append(tok)
 
 	namecache(lookups, 'str', name_table)
 
 	for t,tok in enumerate(tokens):
-		if not isinstance(tok, str): tokids.append(tok)
+		if not isinstance(tok, str) or (mode==ODD and t%2==0) or (mode==EVEN and t%2==1):  tokids.append(tok)
 		elif tok.startswith('-'): tokids.append(I[tok[1:]]*-1)
 		else: tokids.append(I[tok])
 
 	return tokids
 
 
-def keyify(tokens: list, name_table: str = None) -> list:
+def keyify(tokens: list, mode: int = ALL, name_table: str = None) -> list:
 	lookups=[]
 	tokeys=[]
 
 	if not tokens: return tokens
 
-	for tok in tokens:
-		if not isinstance(tok, int): continue
+	for t,tok in enumerate(tokens):
+		if not isinstance(tok, int) or t%2==0 or tok<I['cor']: continue
 		elif not K.get(abs(tok)): lookups.append(abs(tok))
 
 	namecache(lookups, 'aid', name_table)
 
 	for t,tok in enumerate(tokens):
-		if t%2==0 or not isinstance(tok, int): tokeys.append(tok)
+		if not isinstance(tok, int) or t%2==0 or tok<I['cor']: tokeys.append(tok)
 		elif tok<0: tokeys.append(K[abs(tok)]*-1)
 		else: tokeys.append(K[tok])
 
 	return tokeys
 
 
-#### MEMELANG-SQL CONVERSION ####
+###############################################################################
+#                         MEMELANG -> SQL QUERIES
+###############################################################################
 
 # Input: Memelang query string
 # Output: SQL query string
-
-def querify(tokens: list, meme_table: str = None, name_table: str = None):
+def querify(tokens: list, meme_table: str = None, name_table: str = None) -> str:
 	if not meme_table: meme_table=DB['table_meme']
 	if not name_table: name_table=DB['table_name']
 
@@ -553,7 +574,6 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 	while o<olen:
 		operator = tokens[o]
 		operand = tokens[o+1]
-		form = OPR[operator]['form']
 		dcol = OPR[operator]['dcol']
 
 		if dcol == 'cpr': cpr=K[int(operand)]
@@ -573,20 +593,13 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 				inversions.append(False)
 
 			# Inversion
-			if operator == I['['] and operand is not None and operand<0: inversions[m]=True
+			if operator == I['['] and str(operand).startswith('-'): inversions[m]=True
 
-			if dcol and operand is not None:
-				if form in (INT, AID): operand=int(operand)
-				elif form == FLT: operand=float(operand)
-				else: raise Exception('invalid form')
-
-				if dcol!='qnt' or cpr!='#=':
-					eop = cpr if dcol=='qnt' else '='
-					qparts['where'].append(f"({dcol}{m}){eop}%s")
-					params.append(operand)
-
+			if dcol and operand is not None and (dcol!='qnt' or cpr!='#='):
+				eop = cpr if dcol=='qnt' else '='
+				qparts['where'].append(f"({dcol}{m}){eop}%s")
+				params.append(operand)
 		o+=2
-
 
 	if aidOnly: qparts['select'].pop(1)
 	else: 
@@ -607,36 +620,6 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 		+ ('' if not qparts['where'] else ' WHERE ' + ' AND '.join(qparts['where']))
 	), params
 
-
-#### PROCESS MEMELANG QUERY FOR SQL QUERY ####
-
-# Input a Memelang query string
-def query(memestr: str, bid: int = None, meme_table: str = None, name_table: str = None) -> list:
-
-	tokens = identify(decode(memestr), name_table)
-	sql, params = querify(tokens, meme_table, name_table)
-	res = select(sql, params)
-	if not res or not res[0]: return []
-
-	tokens=[I['id'], I['id']]
-
-	strtoks=res[0][0].split()
-	for tok in strtoks:
-		if tok == '': continue
-		elif tok==';': tokens.append(I[';'])
-		elif '.' in tok: tokens.append(float(tok))
-		else: tokens.append(int(tok))
-
-	if bid==I['key']: return keyify(tokens)
-	return tokens
-
-
-# Return meme count of above results
-def count(memestr: str, meme_table: str = None, name_table: str = None):
-	tokens = identify(decode(memestr), name_table)
-	sql, params = querify(tokens, meme_table, name_table)
-	mres=select(sql, params)
-	return 0 if not mres or not mres[0] or not mres[0][0] else mres[0][0].count(';')+1
 
 
 def put (tokens: list, meme_table: str = None, name_table: str = None):
@@ -680,8 +663,8 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 			K[aid]=key
 
 	# Select new ID for missing keys with no associated ID
+	aid = aggnum('aid', 'MAX', name_table) or I['cor']
 	if missings:
-		aid = aggnum('aid', 'MAX', name_table) or I['cor']
 		for key, val in missings.items():
 			aid += 1
 			sqls[name_table].append("(%s,%s,%s)")
@@ -715,14 +698,17 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 			params[meme_table].extend([tokens[beg+1],tokens[beg+3],tokens[beg+5],tokens[beg+7],tokens[beg+9]])
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
-		# [Rx]Bx=Qx >> Ry[By]=Qy
+		# [Ry]By=Qy >> Rz[Bz]=Qz
+		# -By[Ry]X = Qy
+		# -X[Rz]Bz = Qz
 		elif tokfit(tokens[beg:end], [I['['], False, I[']'], False, I['=='], False, I['.'], False, I['&&'], I['>>'], I['['], False, I[']'], False, I['=='], False, I['.'], False]):
-			if varmin==0: 
-				varmin=aggnum('aid', 'MIN', meme_table)
-				if varmin==0: varmin=I['cor']*-1
-			varmin-=1
-			params[meme_table].extend([tokens[beg+3], tokens[beg+1]*-1, varmin, tokens[beg+5], tokens[beg+7]])
-			params[meme_table].extend([varmin, tokens[beg+11], tokens[beg+13], tokens[beg+15], tokens[beg+17]])
+
+			aid+=1
+			sqls[name_table].append("(%s,%s,%s)")
+			params[name_table].extend([aid, I['key'], f'VAR{aid}'])
+
+			params[meme_table].extend([tokens[beg+3]*-1, tokens[beg+1]*-1, aid, tokens[beg+5], tokens[beg+7]])
+			params[meme_table].extend([aid*-1, tokens[beg+11], tokens[beg+13], tokens[beg+15], tokens[beg+17]])
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
@@ -737,9 +723,45 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 	return tokens
 
 
-#### MEME FILE ####
+###############################################################################
+#                         MEMELANG -> SQL -> EXECUTE
+###############################################################################
 
-def read (file_path: str):
+# Input: Memelang query string
+# Output: list of tokens match query from DB
+def query(memestr: str, bid: int = None, meme_table: str = None, name_table: str = None) -> list:
+
+	tokens = identify(decode(memestr), ALL, name_table)
+	sql, params = querify(tokens, meme_table, name_table)
+	res = select(sql, params)
+	if not res or not res[0]: return []
+
+	tokens=[I['id'], I['id']]
+
+	strtoks=res[0][0].split()
+	for tok in strtoks:
+		if tok == '': continue
+		elif tok==';': tokens.append(I[';'])
+		elif '.' in tok: tokens.append(float(tok))
+		else: tokens.append(int(tok))
+
+	if bid==I['key']: return keyify(tokens, ODD, name_table)
+	return tokens
+
+
+# Return meme count of above results
+def count(memestr: str, meme_table: str = None, name_table: str = None) -> int:
+	tokens = identify(decode(memestr), ALL, name_table)
+	sql, params = querify(tokens, meme_table, name_table)
+	mres=select(sql, params)
+	return 0 if not mres or not mres[0] or not mres[0][0] else mres[0][0].count(';')
+
+
+###############################################################################
+#                                FILE I/O
+###############################################################################
+
+def read (file_path: str) -> list:
 	with open(file_path, 'r', encoding='utf-8') as f: tokens = decode(f.read())
 	return tokens
 
@@ -749,22 +771,23 @@ def write (file_path: str, tokens: list):
 		file.write(encode(tokens, {'newline':True}))
 
 
-#### CLI ####
+###############################################################################
+#                                  CLI
+###############################################################################
 
 # Execute and output an SQL query
-def sql(qry_sql):
+def cli_sql(qry_sql):
 	rows = select(qry_sql, [])
 	for row in rows: print(row)
 
 
 # Execute and output a Memelang query
-def qry(memestr):
+def cli_query(memestr):
 	tokens = decode(memestr)
-	tokids = identify(tokens)
 	print ("TOKENS:", tokens)
 	print ("QUERY:", encode(tokens))
 
-	sql, params = querify(tokids)
+	sql, params = querify(identify(tokens))
 	full_sql = morfigy(sql, params)
 	print(f"SQL: {full_sql}\n")
 
@@ -776,14 +799,14 @@ def qry(memestr):
 
 
 # Read a meme file and save it to DB
-def putfile(file_path):
+def cli_putfile(file_path):
 	tokens = read(file_path)
 	tokens = put(tokens)
 	print(encode(keyify(tokens), {'newline':True}))
 
 
 # Test various Memelang queries
-def qrytest():
+def cli_qrytest():
 	queries=[
 		'george_washington',
 		' george_washington]',
@@ -846,7 +869,7 @@ def qrytest():
 
 
 # Add database and user
-def dbadd():
+def cli_dbadd():
 	commands = [
 		f"sudo -u postgres psql -c \"CREATE DATABASE {DB['name']};\"",
 		f"sudo -u postgres psql -c \"CREATE USER {DB['user']} WITH PASSWORD '{DB['pswd']}'; GRANT ALL PRIVILEGES ON DATABASE {DB['name']} to {DB['user']};\"",
@@ -859,7 +882,7 @@ def dbadd():
 
 
 # Add database table
-def tableadd():
+def cli_tableadd():
 	commands = [
 		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_meme']} (aid BIGINT, rid BIGINT, bid BIGINT, cpr SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB['table_meme']}_aid_idx ON {DB['table_meme']} (aid,rid,bid); CREATE INDEX {DB['table_meme']}_rid_idx ON {DB['table_meme']} (rid); CREATE INDEX {DB['table_meme']}_bid_idx ON {DB['table_meme']} (bid);\"",
 		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_name']} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB['table_name']}_aid_idx ON {DB['table_name']} (aid,bid,str); CREATE INDEX {DB['table_name']}_str_idx ON {DB['table_name']} (str);\"",
@@ -873,7 +896,7 @@ def tableadd():
 
 
 # Delete database table
-def tabledel():
+def cli_tabledel():
 	commands = [
 		f"sudo -u postgres psql -d {DB['name']} -c \"DROP TABLE {DB['table_meme']};\"",
 		f"sudo -u postgres psql -d {DB['name']} -c \"DROP TABLE {DB['table_name']};\"",
@@ -884,7 +907,7 @@ def tabledel():
 
 
 # Save aid->key relations in conf.py to name DB table
-def coreadd():
+def cli_coreadd():
 	memestr=''
 	for key in I: memestr+=f'{I[key]}[nam]key="{key}";'
 	tokens = identify(decode(memestr))
@@ -894,28 +917,25 @@ def coreadd():
 if __name__ == "__main__":
 	LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 
-	if sys.argv[1] == 'sql': sql(sys.argv[2])
-	elif sys.argv[1] == 'query' or sys.argv[1] == 'qry' or sys.argv[1] == 'q' or sys.argv[1] == 'get' or sys.argv[1] == 'g': qry(sys.argv[2])
-	elif sys.argv[1] == 'file' or sys.argv[1] == 'import': putfile(sys.argv[2])
-	elif sys.argv[1] == 'dbadd' or sys.argv[1] == 'adddb': dbadd()
-	elif sys.argv[1] == 'tableadd' or sys.argv[1] == 'addtable': tableadd()
-	elif sys.argv[1] == 'tabledel' or sys.argv[1] == 'deltable': tabledel()
-	elif sys.argv[1] == 'coreadd' or sys.argv[1] == 'addcore': coreadd()
-	elif sys.argv[1] == 'qrytest': qrytest()
-
-	elif sys.argv[1] == 'install':
-		dbadd()
-		tableadd()
-		coreadd()
-
-	elif sys.argv[1] == 'reinstall':
-		tabledel()
-		tableadd()
-		coreadd()
-		if len(sys.argv)>2 and sys.argv[2]=='-presidents': putfile(LOCAL_DIR+'/presidents.meme')
-
-	elif sys.argv[1] == 'fileall' or sys.argv[1] == 'allfile':
+	cmd = sys.argv[1]
+	if cmd == 'sql': cli_sql(sys.argv[2])
+	elif cmd in ('query','qry','q','get','g'): cli_query(sys.argv[2])
+	elif cmd in ('file','import'): cli_putfile(sys.argv[2])
+	elif cmd in ('dbadd','adddb'): cli_dbadd()
+	elif cmd in ('tableadd','addtable'): cli_tableadd()
+	elif cmd in ('tabledel','deltable'): cli_tabledel()
+	elif cmd in ('coreadd','addcore'): cli_coreadd()
+	elif cmd == 'qrytest': cli_qrytest()
+	elif cmd == 'install':
+		cli_dbadd()
+		cli_tableadd()
+		cli_coreadd()
+	elif cmd == 'reinstall':
+		cli_tabledel()
+		cli_tableadd()
+		cli_coreadd()
+		if len(sys.argv)>2 and sys.argv[2]=='-presidents': cli_putfile(os.path.join(LOCAL_DIR,'presidents.meme'))
+	elif cmd in ('fileall','allfile'):
 		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
-		for file in files: putfile(file)
-
-	else: sys.exit("MAIN.PY ERROR: Invalid command");
+		for f in files: cli_putfile(f)
+	else: sys.exit("Invalid command")
