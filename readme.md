@@ -1,6 +1,6 @@
 # memesql3
 
-These Python scripts receive [Memelang v3](https://memelang.net/03/) queries, convert them to SQL, then execute them on a Postgres database. 
+This is prototype Python/Postgres implementation of [Memelang v3](https://memelang.net/03/). This Python script receives  Memelang queries, converts them to SQL, executes them on a Postgres database, then returns results as a Memelang string.
 
 ## Memelang v3
 
