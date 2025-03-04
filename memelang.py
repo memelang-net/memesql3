@@ -7,6 +7,7 @@ import glob
 import psycopg2
 from conf import *
 
+
 ###############################################################################
 #                           CONSTANTS & GLOBALS
 ###############################################################################
@@ -34,7 +35,6 @@ INTEGER	= 5		# Integer (not ID)
 FLOAT	= 6		# Floating point number
 STRING	= 7		# String
 
-
 # Each operator and its meaning
 OPR = {
 	I[';']: [A, KEY, False],
@@ -43,7 +43,7 @@ OPR = {
 	I['[']: [R, KEY, False],
 	I[']']: [B, KEY, False],
 	I['=#']: [Q, IDENT, '='],
-	I['=$']: [Q, STRING, '='],
+	I['=$']: [Q, STRING, '="'],
 	I['=.']: [Q, FLOAT, '='],
 	I['>']: [Q, FLOAT, False],
 	I['<']: [Q, FLOAT, False],
@@ -175,7 +175,9 @@ def decode(memestr: str) -> list:
 		
 		# quote
 		if p%2==1:
-			tokens.extend([I['=$'], part])
+			if tokens[-2] != I['=.']: raise Exception('Errant quote')
+			tokens[-2]=I['=$']
+			tokens[-1]=part
 			continue
 
 		strtoks = re.split(SPLITOPR, part)
@@ -198,7 +200,7 @@ def decode(memestr: str) -> list:
 						t+=2
 					elif completeness==INCOMPLETE: raise Exception(f"Invalid strtok {strtok}")
 
-				tokens.extend([operator, None])
+				tokens += [operator, None]
 
 			# key/int/float
 			else:
@@ -224,16 +226,14 @@ def encode(tokens: list, encode_set=None) -> str:
 	if not encode_set: encode_set={}
 	memestr = ''
 
-	o=THEBEG
 	olen=len(tokens)
-	while o<olen:
+	for o in range(THEBEG, olen, 2):
 		if o>THEBEG or tokens[o]!=I[';']: memestr += K[tokens[o]] if OPR[tokens[o]][OUT]==False else OPR[tokens[o]][OUT]
 
 		if OPR[tokens[o]][FORM]==STRING: memestr += str(tokens[o+1]) + '"'
 		elif tokens[o+1] is None: pass
 		elif OPR[tokens[o]][FORM]==IDENT: memestr += K[tokens[o+1]]
 		elif OPR[tokens[o]][FORM] in (KEY, INTEGER, FLOAT): memestr += str(tokens[o+1])
-		o+=2
 
 	if encode_set.get('newline'): memestr=memestr.replace(";", "\n")
 
@@ -253,8 +253,9 @@ def nxt(tokens: list, beg: int = 2) -> int:
 	return olen
 
 
-# Do these statements match?
+# Compare two Memelang token lists
 # False is wildcard
+# TO DO: This needs its own Metamemelang query language
 def tokfit (atoks: list, btoks: list) -> bool:
 	if len(atoks)!=len(btoks): return False
 	for p, btok in enumerate(btoks):
@@ -263,6 +264,49 @@ def tokfit (atoks: list, btoks: list) -> bool:
 			if OPR[atoks[p]][FUNC]!=btok: return False
 		elif atoks[p]!=btok: return False
 	return True
+
+
+# Input: list of integers [operator, operand]
+# Output: one big integer
+def compress(tokens: list) -> int:
+	tlen = len(tokens)
+	if tlen%2: raise ValueError('Odd token count')
+	
+	operator_bitmask = (1<<7)-1
+	operand_bitmask = (1<<57)-1
+	bigint = 1<<63 # Version 0001
+
+	for t in range(tlen-1, 2, -2):
+		operand, operator = tokens[t], tokens[t-1]
+		
+		if operand is None: operand=0
+		elif OPR[operator][FORM]==FLOAT: operand=int(operand*1000000000)
+
+		if not (0<=operator<127): raise ValueError(f'operator range {operator}')
+		if not (-1<<56<=operand<1<<56): raise ValueError(f'operand range {operand}')
+		bigint = (bigint<<64)|(((operator&operator_bitmask)<<57)|(operand&operand_bitmask))
+
+	return bigint
+
+
+# Input: one big integer
+# Output: list of integers [operator, operand]
+def decompress(bigint: int) -> list:
+	if bigint<1<<63:raise ValueError
+	pairs=[I['id'],I['id']]
+	while bigint>1<<63:
+		chunk = bigint&((1<<64)-1);
+		bigint >>= 64
+		operator = chunk>>57;
+		operand = chunk&((1<<57)-1)
+		if operand >= (1<<56): operand-=1<<57
+		
+		if operand==0: operand=None
+		elif OPR[operator][FORM]==FLOAT: operand=float(operand/1000000000)
+
+		pairs += [operator, operand]
+	if bigint != (1<<63): raise ValueError('Version error')
+	return pairs
 
 
 ###############################################################################
@@ -292,43 +336,61 @@ def namecache(tokens: list, fld: str = 'str', name_table: str = None):
 
 def identify(tokens: list = [], mode: int = ALL, name_table: str = None) -> list:
 	lookups=[]
-	tokids=[]
+	tokids=[
+		I['id'] if mode!=ODD else tokens[0],
+		I['id'] if mode!=EVEN else tokens[1],
+	]
 
-	if not tokens: return tokens
+	tlen = len(tokens)
+	if not tlen: return tokens
 
-	for t,tok in enumerate(tokens):
-		if not isinstance(tok, str) or (mode==ODD and t%2==0) or (mode==EVEN and t%2==1): continue
-		if tok.startswith('-'): tok = tok[1:]
-		if not I.get(tok): lookups.append(tok)
+	for t in range(THEBEG, tlen, 2):
+		operator, operand = tokens[t], tokens[t+1]
+		if isinstance(operator, str): operator = I[operator]
+		if isinstance(operand, str) and OPR[operator][FORM]==KEY:
+			if operand.startswith('-'): operand = operand[1:]
+			if not I.get(operand): lookups.append(operand)
 
 	namecache(lookups, 'str', name_table)
 
-	for t,tok in enumerate(tokens):
-		if not isinstance(tok, str) or (mode==ODD and t%2==0) or (mode==EVEN and t%2==1): tokids.append(tok)
-		elif tok.startswith('-'): tokids.append(I[tok[1:]]*-1)
-		else: tokids.append(I[tok])
+	for t in range(THEBEG, tlen, 2):
+		operator, operand = tokens[t], tokens[t+1]
+		if isinstance(operator, str): operator = I[operator]
+		tokids.append(operator if mode!=ODD else tokens[t])
+		if operand is None: tokids.append(operand)
+		elif mode!=EVEN and isinstance(operand, str) and OPR[operator][FORM]==KEY:
+			tokids.append(I[operand] if not operand.startswith('-') else I[operand[1:]]*-1)
+		else: tokids.append(operand)
 
 	return tokids
 
 
 def keyify(tokens: list, mode: int = ODD, name_table: str = None) -> list:
 	lookups=[]
-	tokeys=[]
+	tokeys=[
+		I['key'] if mode!=ODD else tokens[0],
+		I['key'] if mode!=EVEN else tokens[1],
+	]
 
-	if not tokens: return tokens
+	tlen = len(tokens)
+	if not tlen: return tokens
 
-	for t,tok in enumerate(tokens):
-		if not isinstance(tok, int) or (mode==ODD and t%2==0): continue
-		elif not K.get(abs(tok)): lookups.append(abs(tok))
+	for t in range(THEBEG, tlen, 2):
+		operator, operand = tokens[t], tokens[t+1]
+		if isinstance(operator, str): operator = I[operator]
+		if isinstance(operand, int) and OPR[operator][FORM]==KEY:
+			lookups.append(abs(operand))
 
 	namecache(lookups, 'aid', name_table)
 
-	for t,tok in enumerate(tokens):
-		if t==0: tokeys.append(I['key'] if mode!=ODD else I['id'])
-		elif t==1: tokeys.append(I['key'])
-		elif not isinstance(tok, int) or (mode==ODD and t%2==0): tokeys.append(tok)
-		elif tok<0: tokeys.append('-'+K[abs(tok)])
-		else: tokeys.append(K[tok])
+	for t in range(THEBEG, tlen, 2):
+		operator, operand = tokens[t], tokens[t+1]
+		if isinstance(operator, str): operator = I[operator]
+		tokeys.append(K[operator] if mode!=ODD else tokens[t])
+		if operand is None: tokeys.append(operand)
+		elif mode!=EVEN and isinstance(operand, int) and OPR[operator][FORM]==KEY:
+			tokeys.append(K[operand] if operand>=0 else '-'+K[-1*operand])
+		else: tokeys.append(operand)
 
 	return tokeys
 
@@ -372,7 +434,7 @@ def subquerify(tokens: list, meme_table: str = None, cte_beg: int = 0):
 	o=0
 	beg=o
 	olen=len(tokens)
-	while o<olen:
+	for o in range(0, olen, 2):
 		if OPR[tokens[o]][FUNC] == A and tokens[o+1] == I['qry']:
 			qry_set[tokens[o+3]]=True
 			skip=True
@@ -396,7 +458,6 @@ def subquerify(tokens: list, meme_table: str = None, cte_beg: int = 0):
 			beg=o+2
 			gnum=1000+o
 			gkey='true'
-		o+=2
 
 	or_cnt = len(groups['true'])
 	false_cnt = len(groups['false'][0])
@@ -475,9 +536,8 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 	m = 0
 	cpr = '=.'
 
-	o=0
 	olen=len(tokens)
-	while o<olen:
+	for o in range(0, olen, 2):
 		operator = tokens[o]
 		operand = tokens[o+1]
 		func = OPR[operator][FUNC]
@@ -491,17 +551,12 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 
 		# Chained [R[R or ]B]B or [R[]R
 		if o>2 and (func == R or (func == B and OPR[tokens[o-2]][FUNC] == B)):
-				# select previous [R
-				qparts['select'][1] += f", {I['[']}, (R{m})"
+			qparts['select'][1] += f", {I['[']}, (R{m})"
+			if OPR[tokens[o-2]][FUNC] == B: qparts['select'][1] += f", {I[']']}, (B{m})"
 
-				# select previous ]B
-				if OPR[tokens[o-2]][FUNC] == B:
-					qparts['select'][1] += f", {I[']']}, (B{m})"
-
-				# join
-				m+=1
-				qparts['join'].append(f"JOIN {meme_table} m{m} ON (B{m-1})=(A{m})")
-				inversions.append(False)
+			m+=1
+			qparts['join'].append(f"JOIN {meme_table} m{m} ON (B{m-1})=(A{m})")
+			inversions.append(False)
 
 		# where
 		if operand is not None:
@@ -515,8 +570,6 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 			elif func in (A,R,B):
 				qparts['where'].append(f"({func}{m})=%s")
 				params.append(operand)
-
-		o+=2
 
 	if aidOnly: qparts['select'].pop(1)
 	else: 
@@ -549,12 +602,11 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 	params = {meme_table:[], name_table:[]}
 
 	# Swap keys with IDs or mark key missing
-	o=THEBEG
 	olen=len(tokens)
-	while o<olen:
+	for o in range(THEBEG, olen, 2):
 		if OPR[tokens[o]][FORM]==FLOAT: tokens[o+1]=float(tokens[o+1])
-		elif OPR[tokens[o]][FORM]==KEY and not isinstance(tokens[o+1], int):
-			operand=str(tokens[o+1])
+		elif OPR[tokens[o]][FORM]==KEY and isinstance(tokens[o+1], str):
+			operand=tokens[o+1]
 			if operand.startswith('-'): 
 				operand=operand[1:]
 				sign=-1
@@ -563,10 +615,9 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 			if operand.isdigit(): tokens[o+1]=int(tokens[o+1])
 			elif I.get(operand): tokens[o+1]=I[operand]*sign
 			else: missings[operand]=1
-		o+=2
 
 	# Mark id-key for writing from id[nam]key="xyz"
-	end=THEBEG
+	end = THEBEG
 	while (end := nxt(tokens, (beg := end)))>0:
 		if tokfit(tokens[beg:end], [A, False, R, I['nam'], B, I['key'], I['=$'], False]):
 			aid = tokens[beg+1]
@@ -588,12 +639,10 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 			K[aid]=key
 
 	# Swap missing keys for new IDs
-	o=THEBEG
-	while o<olen:
+	for o in range(THEBEG, olen, 2):
 		if OPR[tokens[o]][FORM]==KEY and isinstance(tokens[o+1], str):
 			if tokens[o+1].startswith('-'): tokens[o+1]=I[tokens[o+1][1:]]*-1
 			else: tokens[o+1]=I[tokens[o+1]]
-		o+=2
 
 	# Pull out non-key names and truths
 	end=THEBEG
@@ -602,7 +651,7 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 
 		# A[nam]B = "String"
 		elif tokfit(tokens[beg:end], [A, False, R, I['nam'], B, False, I['=$'], False]):
-			if tokens[beg+B]!=I['key']:
+			if tokens[beg+5]!=I['key']:
 				params[name_table].extend([tokens[beg+1], tokens[beg+5], tokens[beg+7]])
 				sqls[name_table].append('(%s,%s,%s)')
 
@@ -780,7 +829,7 @@ def cli_qrytest():
 		print('Query 1:', memestr)
 
 		for i in range(2,4):
-			memestr2 = encode(tokens)
+			memestr2 = encode(keyify(decompress(compress(identify(tokens, ALL)))))
 			print(f'Query {i}:', memestr2)
 			tokens = decode(memestr2)
 
@@ -845,7 +894,7 @@ def cli_coreadd():
 	memestr=''
 	for key in I: memestr+=f'{I[key]}[nam]key="{key}";'
 	tokens = identify(decode(memestr))
-	print(encode(tokens, {'newline':True}))
+	print(encode(put(tokens), {'newline':True}))
 
 
 if __name__ == "__main__":
