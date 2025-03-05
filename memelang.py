@@ -29,11 +29,10 @@ Q		= 'Q'
 OR		= 'OR'
 
 # FORM
-KEY		= 3		# Integer ID or string KEY
-IDENT	= 4		# integer ID
-INTEGER	= 5		# Integer (not ID)
-FLOAT	= 6		# Floating point number
-STRING	= 7		# String
+KEY		= 1		# Integer ID or string KEY
+DECIMAL	= 2		# Floating point number
+STRING	= 3		# String
+NULL	= 4		# Null
 
 # Each operator and its meaning
 OPR = {
@@ -42,15 +41,17 @@ OPR = {
 	I['>>']: [A, KEY, False],
 	I['[']: [R, KEY, False],
 	I[']']: [B, KEY, False],
-	I['=#']: [Q, IDENT, '='],
+	I['=t']: [Q, NULL, False],
+	I['=f']: [Q, NULL, False],
+	I['=g']: [Q, NULL, False],
 	I['=$']: [Q, STRING, '="'],
-	I['=.']: [Q, FLOAT, '='],
-	I['>']: [Q, FLOAT, False],
-	I['<']: [Q, FLOAT, False],
-	I['>=']: [Q, FLOAT, False],
-	I['<=']: [Q, FLOAT, False],
-	I['!=']: [Q, FLOAT, False],
-	I['|']: [OR, INTEGER, ''],
+	I['=.']: [Q, DECIMAL, '='],
+	I['>']: [Q, DECIMAL, False],
+	I['<']: [Q, DECIMAL, False],
+	I['>=']: [Q, DECIMAL, False],
+	I['<=']: [Q, DECIMAL, False],
+	I['!=']: [Q, DECIMAL, False],
+	I['|']: [OR, DECIMAL, ''],
 }
 
 # For decode()
@@ -58,18 +59,21 @@ INCOMPLETE = 1
 INTERMEDIATE = 2
 COMPLETE = 3
 OPSTR = {
-	'!'  : [INCOMPLETE, False],
-	'>'  : [INTERMEDIATE, I['>']],
-	'<'  : [INTERMEDIATE, I['<']],
-	'='  : [COMPLETE, I['=.']],
-	'!=' : [COMPLETE, I['!=']],
-	'>=' : [COMPLETE, I['>=']],
-	'<=' : [COMPLETE, I['<=']],
-	'['  : [COMPLETE, I['[']],
-	']'  : [COMPLETE, I[']']],
-	';'  : [COMPLETE, I[';']],
-	' '  : [COMPLETE, I[' ']],
-	'>>' : [COMPLETE, I['>>']],
+	'!'   : [INCOMPLETE, False],
+	'>'   : [INTERMEDIATE, I['>']],
+	'<'   : [INTERMEDIATE, I['<']],
+	'='   : [INTERMEDIATE, I['=.']],
+	'=t'  : [COMPLETE, I['=t']],
+	'=f'  : [COMPLETE, I['=f']],
+	'=g'  : [COMPLETE, I['=g']],
+	'!='  : [COMPLETE, I['!=']],
+	'>='  : [COMPLETE, I['>=']],
+	'<='  : [COMPLETE, I['<=']],
+	'['   : [COMPLETE, I['[']],
+	']'   : [COMPLETE, I[']']],
+	';'   : [COMPLETE, I[';']],
+	' '   : [COMPLETE, I[' ']],
+	'>>'  : [COMPLETE, I['>>']],
 }
 
 SPLITOPR = r'([#;\[\]!><=\s])'
@@ -133,87 +137,64 @@ def slugify(string: str) -> str:
 #                       MEMELANG STRINGING PROCESSING
 ###############################################################################
 
-# Input: Memelang string
-# Output: list of normalized Memelang strings, which should be joined by double quote (")
-# This splits by quotes so quoted string aren't altered
-def normalize(memestr: str, newline = False) -> list[str]:
-
-	parts = re.split(r'(?<!\\)"', ';'+memestr.strip())
-	for p,part in enumerate(parts):
-
-		# quote
-		if p%2==1:
-			parts[p]=part
-			continue
-
-		# memelang code
-		part = re.sub(r'[;\n]+', ';', part)					# Newlines are semicolons
-		part = re.sub(r'\s+', ' ', part)					# Remove multiple spaces
-		part = re.sub(r'\s*([#;!<>=]+)\s*', r'\1', part)	# Remove spaces around operators
-		part = re.sub(r';+', ';', part)						# Remove multiple semicolons
-		part = re.sub(r'(\.[0-9][1-9]*)0+', r'\1', part)	# Remove trailing zeros from floats
-		part = re.sub(r';+$', '', part)						# Remove ending ;
-
-		if newline: part = part.replace(";", "\n")
-		parts[p]=part
-
-	return parts
-
-
 # Input: Memelang string "operator1operand1operator2operand2"
 # Output: [operator1, operand1, operator2, operand2, ...]
 def decode(memestr: str) -> list:
 
-	memestr = re.sub(r'\s*//.*$', '', memestr, flags=re.MULTILINE) # Remove comments
+	memestr = re.sub(r'\s*//.*$', '', memestr, flags=re.MULTILINE).strip() # Remove comments
 	if len(memestr) == 0: raise Exception("Error: Empty query provided.")
 
 	tokens = [I['id'], I['mix']]
+	parts = re.split(r'(?<!\\)"', ';'+memestr)
+	for p, part in enumerate(parts):
 
-	parts = normalize(memestr)
-
-	for p,part in enumerate(parts):
-		
-		# quote
+		# Quote
 		if p%2==1:
 			if tokens[-2] != I['=.']: raise Exception('Errant quote')
-			tokens[-2]=I['=$']
-			tokens[-1]=part
+			tokens[-2], tokens[-1] = I['=$'], part
 			continue
 
+		# Memelang code
+		part = re.sub(r'[;\n]+', ';', part)					# Newlines are semicolons
+		part = re.sub(r'\s+', ' ', part)					# Remove multiple spaces
+		part = re.sub(r'\s*([#;!<>=]+)\s*', r'\1', part)	# Remove spaces around operators
+		part = re.sub(r';+', ';', part)						# Remove multiple semicolons
+		part = re.sub(r';+$', '', part)						# Remove ending ;
+
+		# Split by operator characters
 		strtoks = re.split(SPLITOPR, part)
 		tlen = len(strtoks)
 		t = 0
 		while t<tlen:
 			strtok=strtoks[t]
 
-			# skip empty
+			# Skip empty
 			if len(strtok)==0: pass
 
-			# operators
+			# Operator
 			elif OPSTR.get(strtok):
 
+				# We might want to rejoin two sequential operator characters
+				# Such as > and =
 				completeness, operator = OPSTR[strtok]
-
 				if completeness!=COMPLETE:
-					if t<tlen-3 and OPSTR.get(strtok+strtoks[t+2]):
-						completeness, operator = OPSTR[strtok+strtoks[t+2]]
-						t+=2
-					elif completeness==INCOMPLETE: raise Exception(f"Invalid strtok {strtok}")
+					for n in (1,2):
+						if t<tlen-n and len(strtoks[t+n]):
+							if OPSTR.get(strtok+strtoks[t+n]):
+								completeness, operator = OPSTR[strtok+strtoks[t+n]]
+								t+=n
+							break
+					if completeness==INCOMPLETE: raise Exception(f"Invalid strtok {strtok}")
 
 				tokens += [operator, None]
 
-			# key/int/float
+			# Key/Integer/Decimal
 			else:
 				if tokens[-1]!=None: raise Exception(f'Sequence error {tokens[-2]} {tokens[-1]} {strtok}')
 				if not re.search(r'[a-z0-9]', strtok): raise Exception(f"Unexpected '{strtok}' in {memestr}")
-
-				if strtok in TFG: 
-					tokens[-1]=I[strtok]
-					if tokens[-2] not in (I['=.'],I['=#']): raise Exception('Compare sequence error')
-					tokens[-2]=I['=#']
-				elif '.' in strtok or OPR[tokens[-2]][FORM]==FLOAT: tokens[-1]=float(strtok)
-				elif re.match(r'-?[0-9]+', strtok): tokens[-1]=int(strtok)
-				else: tokens[-1]=strtok
+				if OPR[tokens[-2]][FORM]==DECIMAL: tokens[-1] = float(strtok)
+				elif re.match(r'-?[0-9]+', strtok): tokens[-1] = int(strtok)
+				else: tokens[-1] = strtok
 
 			t+=1
 
@@ -229,12 +210,8 @@ def encode(tokens: list, encode_set=None) -> str:
 	olen=len(tokens)
 	for o in range(THEBEG, olen, 2):
 		if o>THEBEG or tokens[o]!=I[';']: memestr += K[tokens[o]] if OPR[tokens[o]][OUT]==False else OPR[tokens[o]][OUT]
-
-		if OPR[tokens[o]][FORM]==STRING: memestr += str(tokens[o+1]) + '"'
-		elif tokens[o+1] is None: pass
-		elif OPR[tokens[o]][FORM]==IDENT: memestr += K[tokens[o+1]]
-		elif OPR[tokens[o]][FORM] in (KEY, INTEGER, FLOAT): memestr += str(tokens[o+1])
-
+		if OPR[tokens[o]][FORM] == STRING: memestr += str(tokens[o+1]) + '"'
+		elif OPR[tokens[o]][FORM] != NULL and tokens[o+1] is not None: memestr += str(tokens[o+1])
 	if encode_set.get('newline'): memestr=memestr.replace(";", "\n")
 
 	return memestr
@@ -268,7 +245,7 @@ def tokfit (atoks: list, btoks: list) -> bool:
 
 # Input: list of integers [operator, operand]
 # Output: one big integer
-def compress(tokens: list) -> int:
+def pack(tokens: list) -> int:
 	tlen = len(tokens)
 	if tlen%2: raise ValueError('Odd token count')
 	
@@ -280,7 +257,7 @@ def compress(tokens: list) -> int:
 		operand, operator = tokens[t], tokens[t-1]
 		
 		if operand is None: operand=0
-		elif OPR[operator][FORM]==FLOAT: operand=int(operand*1000000000)
+		elif OPR[operator][FORM]==DECIMAL: operand=int(operand*1000000)
 
 		if not (0<=operator<127): raise ValueError(f'operator range {operator}')
 		if not (-1<<56<=operand<1<<56): raise ValueError(f'operand range {operand}')
@@ -291,7 +268,7 @@ def compress(tokens: list) -> int:
 
 # Input: one big integer
 # Output: list of integers [operator, operand]
-def decompress(bigint: int) -> list:
+def unpack(bigint: int) -> list:
 	if bigint<1<<63:raise ValueError
 	pairs=[I['id'],I['id']]
 	while bigint>1<<63:
@@ -302,7 +279,7 @@ def decompress(bigint: int) -> list:
 		if operand >= (1<<56): operand-=1<<57
 		
 		if operand==0: operand=None
-		elif OPR[operator][FORM]==FLOAT: operand=float(operand/1000000000)
+		elif OPR[operator][FORM]==DECIMAL: operand=float(operand/1000000)
 
 		pairs += [operator, operand]
 	if bigint != (1<<63): raise ValueError('Version error')
@@ -440,10 +417,12 @@ def subquerify(tokens: list, meme_table: str = None, cte_beg: int = 0):
 			skip=True
 
 		# =f or =g
-		elif tokens[o] == I['=#']:
+		elif tokens[o] == I['=f']:
 			gnum=0
-			if tokens[o+1] == I['f']: gkey='false'
-			elif tokens[o+1] == I['g']: gkey='get'
+			gkey='false'
+		elif tokens[o] == I['=g']:
+			gnum=0
+			gkey='get'
 
 		# Handle =tn (OR groups)
 		elif tokens[o] == I['|']:
@@ -560,11 +539,9 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 
 		# where
 		if operand is not None:
-			if operator == I['=#']: pass
+			if operator in (I['=t'],I['=f'],I['=g']): pass
 			elif func == Q:
-				cpr=K[operator] if OPR[operator][OUT]==False else OPR[operator][OUT]
-				if   cpr == '=#': cpr='='
-				elif cpr == '=.': cpr='='
+				cpr=K[operator] if not OPR[operator][OUT] else OPR[operator][OUT]
 				qparts['where'].append(f"m{m}.qnt{cpr}%s")
 				params.append(operand)
 			elif func in (A,R,B):
@@ -604,7 +581,7 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 	# Swap keys with IDs or mark key missing
 	olen=len(tokens)
 	for o in range(THEBEG, olen, 2):
-		if OPR[tokens[o]][FORM]==FLOAT: tokens[o+1]=float(tokens[o+1])
+		if OPR[tokens[o]][FORM]==DECIMAL: tokens[o+1]=float(tokens[o+1])
 		elif OPR[tokens[o]][FORM]==KEY and isinstance(tokens[o+1], str):
 			operand=tokens[o+1]
 			if operand.startswith('-'): 
@@ -657,7 +634,7 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 
 		# A[R]B
 		elif tokfit(tokens[beg:end], [A, False, R, False, B, False]):
-			params[meme_table].extend([tokens[beg+1],tokens[beg+3],tokens[beg+5],I['=#'],I['t']])
+			params[meme_table].extend([tokens[beg+1],tokens[beg+3],tokens[beg+5],I['=t'],None])
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
 		# A[R]B=Q
@@ -673,8 +650,8 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 			sqls[name_table].append("(%s,%s,%s)")
 			params[name_table].extend([aid, I['key'], f'VAR{aid}'])
 
-			params[meme_table].extend([tokens[beg+5]*-1, tokens[beg+3]*-1, aid, I['=#'], I['t']])
-			params[meme_table].extend([aid*-1, tokens[beg+9], tokens[beg+11], I['=#'], I['t']])
+			params[meme_table].extend([tokens[beg+5]*-1, tokens[beg+3]*-1, aid, I['=t'], None])
+			params[meme_table].extend([aid*-1, tokens[beg+9], tokens[beg+11], I['=t'], None])
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
@@ -829,7 +806,7 @@ def cli_qrytest():
 		print('Query 1:', memestr)
 
 		for i in range(2,4):
-			memestr2 = encode(keyify(decompress(compress(identify(tokens, ALL)))))
+			memestr2 = encode(keyify(unpack(pack(identify(tokens, ALL)))))
 			print(f'Query {i}:', memestr2)
 			tokens = decode(memestr2)
 
