@@ -13,20 +13,9 @@ from conf import *
 ###############################################################################
 
 THEBEG	= 2
-ODD		= 1
-EVEN	= 2
-ALL		= 4
-
-FUNC 	= 0
-FORM 	= 1
-OUT 	= 2
-
-# FUNC
-A		= 'A'
-R		= 'R'
-B		= 'B'
-Q		= 'Q'
-OR		= 'OR'
+ODD, EVEN, ALL = 1, 2, 4
+FUNC, FORM, OUT = 0, 1, 2
+A, R, B, Q, OR = 'A', 'R', 'B', 'Q', 'OR'
 
 # FORM
 KEY		= 1		# Integer ID or string KEY
@@ -55,9 +44,7 @@ OPR = {
 }
 
 # For decode()
-INCOMPLETE = 1
-INTERMEDIATE = 2
-COMPLETE = 3
+INCOMPLETE, INTERMEDIATE, COMPLETE = 1, 2, 3
 OPSTR = {
 	'!'   : [INCOMPLETE, False],
 	'>'   : [INTERMEDIATE, I['>']],
@@ -76,16 +63,13 @@ OPSTR = {
 	'>>'  : [COMPLETE, I['>>']],
 }
 
-SPLITOPR = r'([#;\[\]!><=\s])'
-TFG = ('t', 'f', 'g')
-
 
 ###############################################################################
 #                        DATABASE HELPER FUNCTIONS
 ###############################################################################
 
 def select(query: str, params: list = []) -> list:
-	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}") as conn:
+	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pass']}") as conn:
 		cursor = conn.cursor()
 		cursor.execute(query, params)
 		rows=cursor.fetchall()
@@ -93,7 +77,7 @@ def select(query: str, params: list = []) -> list:
 
 
 def insert(query: str, params: list = []):
-	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pswd']}") as conn:
+	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pass']}") as conn:
 		cursor = conn.cursor()
 		cursor.execute(query, params)
 
@@ -162,7 +146,7 @@ def decode(memestr: str) -> list:
 		part = re.sub(r';+$', '', part)						# Remove ending ;
 
 		# Split by operator characters
-		strtoks = re.split(SPLITOPR, part)
+		strtoks = re.split(r'([#;\[\]!><=\s])', part)
 		tlen = len(strtoks)
 		t = 0
 		while t<tlen:
@@ -203,8 +187,7 @@ def decode(memestr: str) -> list:
 
 # Input: tokens [operator1, operand1, operator2, operand2, ...]
 # Output: Memelang string "operator1operand1operator2operand2"
-def encode(tokens: list, encode_set=None) -> str:
-	if not encode_set: encode_set={}
+def encode(tokens: list, fset={}) -> str:
 	memestr = ''
 
 	olen=len(tokens)
@@ -212,7 +195,7 @@ def encode(tokens: list, encode_set=None) -> str:
 		if o>THEBEG or tokens[o]!=I[';']: memestr += K[tokens[o]] if OPR[tokens[o]][OUT]==False else OPR[tokens[o]][OUT]
 		if OPR[tokens[o]][FORM] == STRING: memestr += str(tokens[o+1]) + '"'
 		elif OPR[tokens[o]][FORM] != NULL and tokens[o+1] is not None: memestr += str(tokens[o+1])
-	if encode_set.get('newline'): memestr=memestr.replace(";", "\n")
+	if fset.get('newline'): memestr=memestr.replace(";", "\n")
 
 	return memestr
 
@@ -378,135 +361,85 @@ def keyify(tokens: list, mode: int = ODD, name_table: str = None) -> list:
 
 # Input: Memelang query string
 # Output: SQL query string
-def querify(tokens: list, meme_table: str = None, name_table: str = None):
+def querify(tokens: list, meme_table: str = None) -> tuple[str, list]:
 	if not meme_table: meme_table=DB['table_meme']
-	if not name_table: name_table=DB['table_name']
 
-	ctes	= []
-	selects	= []
-	params	= []
+	ctes, selects, params = [], [], []
+	cte_beg, cte_end = 0, 0
 
 	beg = 0
 	end = THEBEG
-	while (end := nxt(tokens, (beg := end)))>0:
-		cte, select, param = subquerify(tokens[beg:end], meme_table, len(ctes))
-		ctes.extend(cte)
-		selects.extend(select)
-		params.extend(param)
+	while (end := nxt(tokens, (beg := end)))>0: # Split by ;
 
-	return ['WITH ' + ', '.join(ctes) + " SELECT string_agg(arbeq, ' ') AS arbeq FROM (" + ' UNION '.join(selects) + ')', params]
+		trues={}
+		skip = False
+		cte_beg = cte_end
+		not_params = []
+		not_where = ''
+		ret_selects = []
+
+		for o in range(beg, end, 2): # Split by ' '
+			if OPR[tokens[o]][FUNC] == A and tokens[o+1] == I['qry']:
+				skip=True	
+				if o+3 < end and tokens[o+3]=='all':
+					qry_select, qry_params = selectify([I[']']])
+					ret_selects.append(f"{qry_select} WHERE m0.aid IN (SELECT a0 FROM ZLAST)")
+
+			elif o==end-2 or OPR[tokens[o+2]][FUNC]==A:
+				if tokens[o] == I['=f']: # False
+					qry_select, qry_params = selectify(tokens[beg:o+2], {'aidselect':True})
+					not_where += f" AND m0.aid NOT IN ({qry_select})"
+					not_params.extend(qry_params)
+
+				elif tokens[o] == I['=g']: # Get
+					qry_select, qry_params = selectify(tokens[beg:o+2])
+					ret_selects.append(f"{qry_select} AND a0 IN (SELECT a0 FROM ZLAST)")
+					params.extend(qry_params)
+
+				elif not skip: # True or Quantity
+					gnum = tokens[o+1] if tokens[o] == I['|'] else 1000+o
+					if not trues.get(gnum): trues[gnum]=[]
+					trues[gnum].append([beg, o+2])
+
+				skip=False
+				beg=o+2
+
+		for gnum in trues:
+			or_selects = []
+			for beg, end in trues[gnum]:
+				qry_select, qry_params = selectify(tokens[beg:end])
+
+				if cte_end==cte_beg:
+					qry_select += not_where
+					qry_params.extend(not_params)
+
+				else: qry_select+=f" AND m0.aid IN (SELECT a0 FROM z{cte_end})"
+
+				or_selects.append(qry_select)
+				params.extend(qry_params)
+
+			cte_end += 1
+			ctes.append(f"z{cte_end} AS ({' UNION '.join(or_selects)})")
+
+		for cte_cnt in range(cte_beg, cte_end):
+			ret_selects.append(f"SELECT arbcq FROM z{cte_cnt+1}" + ('' if cte_cnt+1 == cte_end else f" WHERE a0 IN (SELECT a0 FROM ZLAST)"))
+
+		selects.extend([ret_select.replace('ZLAST', f"z{cte_end}") for ret_select in ret_selects])
 
 
-# Input: tokens
-# Output: One SQL query string
-def subquerify(tokens: list, meme_table: str = None, cte_beg: int = 0):
-	if not meme_table: meme_table=DB['table_meme']
-	qry_set = {I['all']: False}
-	groups={'false':{0:[]},'get':{0:[]}, 'true':{}}
+	sql = 'WITH ' + ', '.join(ctes) + " SELECT string_agg(arbcq, ' ') AS arbcq FROM (" + ' UNION '.join(selects) + ')'
+	sql = sql.replace('MEMETABLE', meme_table)
 
-	skip = False
-	gkey='true'
-	gnum=1000
-
-	o=0
-	beg=o
-	olen=len(tokens)
-	for o in range(0, olen, 2):
-		if OPR[tokens[o]][FUNC] == A and tokens[o+1] == I['qry']:
-			qry_set[tokens[o+3]]=True
-			skip=True
-
-		# =f or =g
-		elif tokens[o] == I['=f']:
-			gnum=0
-			gkey='false'
-		elif tokens[o] == I['=g']:
-			gnum=0
-			gkey='get'
-
-		# Handle =tn (OR groups)
-		elif tokens[o] == I['|']:
-			gkey = 'true'
-			gnum = tokens[o+1]
-
-		if o==olen-2 or tokens[o+2]==I[' ']:
-			if not skip: 
-				if not groups[gkey].get(gnum): groups[gkey][gnum]=[]
-				groups[gkey][gnum].append(tokens[beg:o+2])
-			skip=False
-			beg=o+2
-			gnum=1000+o
-			gkey='true'
-
-	or_cnt = len(groups['true'])
-	false_cnt = len(groups['false'][0])
-
-	# If qry_set['all'] and no true/false/or conditions
-	if qry_set.get(I['all']) and false_cnt == 0 and or_cnt == 0:
-		qry_select, _ = selectify([I[']']], meme_table)
-		# FIX LATER
-		return [], [qry_select], []
-
-	z = cte_beg
-	params   = []
-	cte_sqls = []
-	sel_sqls = []
-	notparams = []
-	notwhere = ''
-
-	# Process NOT groups
-	if false_cnt:
-		if or_cnt < 1: raise Exception('A query with a false statement must contain at least one true statement.')
-
-		for subtokens in groups['false'][0]:
-			qry_select, qry_params = selectify(subtokens, meme_table, True)
-			notwhere += f" AND m0.aid NOT IN ({qry_select})"
-			notparams.extend(qry_params)
-
-	# Process OR groups
-	for gnum in groups['true']:
-		or_selects = []
-		for subtokens in groups['true'][gnum]:
-
-			qry_select, qry_params = selectify(subtokens, meme_table)
-
-			if z>cte_beg: qry_select+=f" AND m0.aid IN (SELECT a0 FROM z{z})"
-			elif notwhere: 
-				qry_select += notwhere
-				qry_params.extend(notparams)
-				notwhere=''
-
-			or_selects.append(qry_select)
-			params.extend(qry_params)
-		z += 1
-		cte_sqls.append(f"z{z} AS ({' UNION '.join(or_selects)})")
-
-	# select all data related to the matching As
-	if qry_set.get(I['all']):
-		qry_select, qry_params = selectify([I[']']], meme_table)
-		sel_sqls.append(f"{qry_select} WHERE m0.aid IN (SELECT a0 FROM z{z})")
-
-	# get groups
-	else:
-		for subtokens in groups['get'][0]:
-			qry_select, qry_params = selectify(subtokens, meme_table)
-			sel_sqls.append(f"{qry_select} AND a0 IN (SELECT a0 FROM z{z})")
-			params.extend(qry_params)
-
-	for cte_out in range(cte_beg, z):
-		sel_sqls.append(f"SELECT arbeq FROM z{cte_out+1}" + ('' if cte_out+1 == z else f" WHERE a0 IN (SELECT a0 FROM z{z})"))
-
-	return cte_sqls, sel_sqls, params
+	return sql, params
 
 
 # Input: tokens
 # Output: SELECT string, FROM string, WHERE string, and depth int
-def selectify(tokens: list, meme_table=None, aidOnly=False):
-	if not meme_table: meme_table=DB['table_meme']
+def selectify(tokens: list, fset={}) -> tuple[str, list]:
 
 	qparts = {
 		'select': [f"(A0) AS a0", f"concat_ws(' ', ';', (A0)"],
-		'join': [f" FROM {meme_table} m0"],
+		'join': [f" FROM MEMETABLE m0"],
 		'where': []
 	}
 
@@ -534,7 +467,7 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 			if OPR[tokens[o-2]][FUNC] == B: qparts['select'][1] += f", {I[']']}, (B{m})"
 
 			m+=1
-			qparts['join'].append(f"JOIN {meme_table} m{m} ON (B{m-1})=(A{m})")
+			qparts['join'].append(f"JOIN MEMETABLE m{m} ON (B{m-1})=(A{m})")
 			inversions.append(False)
 
 		# where
@@ -548,9 +481,9 @@ def selectify(tokens: list, meme_table=None, aidOnly=False):
 				qparts['where'].append(f"({func}{m})=%s")
 				params.append(operand)
 
-	if aidOnly: qparts['select'].pop(1)
+	if fset.get('aidselect'): qparts['select'].pop(1)
 	else: 
-		qparts['select'][1] += f", {I['[']}, (R{m}), {I[']']}, (B{m}), m{m}.cpr, m{m}.qnt) AS arbeq"
+		qparts['select'][1] += f", {I['[']}, (R{m}), {I[']']}, (B{m}), m{m}.cpr, m{m}.qnt) AS arbcq"
 
 	for i,inv in enumerate(inversions):
 		for qpart in qparts:
@@ -688,7 +621,7 @@ def put (tokens: list, meme_table: str = None, name_table: str = None):
 def query(memestr: str, bid: int = None, meme_table: str = None, name_table: str = None) -> list:
 
 	tokens = identify(decode(memestr), ALL, name_table)
-	sql, params = querify(tokens, meme_table, name_table)
+	sql, params = querify(tokens, meme_table)
 	res = select(sql, params)
 	if not res or not res[0] or not res[0][0]: return []
 
@@ -708,7 +641,7 @@ def query(memestr: str, bid: int = None, meme_table: str = None, name_table: str
 # Return meme count of above results
 def count(memestr: str, meme_table: str = None, name_table: str = None) -> int:
 	tokens = identify(decode(memestr), ALL, name_table)
-	sql, params = querify(tokens, meme_table, name_table)
+	sql, params = querify(tokens, meme_table)
 	res=select(sql, params)
 	return 0 if not res or not res[0] or not res[0][0] else res[0][0].count(';')
 
@@ -793,7 +726,7 @@ def cli_qrytest():
 		'[birth[year]adyear<=2000',
 		'[spouse]',
 		'[spouse] [child]',
-		'[birth[year]adyear>=1800 [birth[year]adyear<1900',
+		'[birth[year]adyear>=1800 [birth][year]adyear<1900',
 		'[spouse [child [birth[year]adyear<1900',
 		'george_washington; john_adams',
 		'george_washington;; john_adams;; ; thomas_jefferson;',
@@ -832,7 +765,7 @@ def cli_qrytest():
 def cli_dbadd():
 	commands = [
 		f"sudo -u postgres psql -c \"CREATE DATABASE {DB['name']};\"",
-		f"sudo -u postgres psql -c \"CREATE USER {DB['user']} WITH PASSWORD '{DB['pswd']}'; GRANT ALL PRIVILEGES ON DATABASE {DB['name']} to {DB['user']};\"",
+		f"sudo -u postgres psql -c \"CREATE USER {DB['user']} WITH PASSWORD '{DB['pass']}'; GRANT ALL PRIVILEGES ON DATABASE {DB['name']} to {DB['user']};\"",
 		f"sudo -u postgres psql -c \"GRANT ALL PRIVILEGES ON DATABASE {DB['name']} to {DB['user']};\""
 	]
 

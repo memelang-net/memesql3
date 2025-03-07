@@ -3,7 +3,7 @@
 DB = {
 	'host' : 'localhost',   # Host for Poseqres
 	'user' : 'memeuser',    # Username for Poseqres
-	'pswd' : 'memepswd',    # Password for Poseqres
+	'pass' : 'memepswd',    # Password for Poseqres
 	'name' : 'memedb',      # Database name for Poseqres
 	'table_meme' :'meme',
 	'table_name' :'name'
@@ -11,7 +11,6 @@ DB = {
 
 # Global dictionary to cache key->id mappings
 I = {
-
 	'['   : 1,
 	']'   : 2,
 	'|'   : 3,
@@ -39,7 +38,6 @@ I = {
 	'of'  : 261,
 	'all' : 262,
 	'mix' : 263,
-
 
 	'cor'  : 9999999
 }
