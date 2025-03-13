@@ -5,51 +5,84 @@ import os
 import re
 import glob
 import psycopg2
-from conf import *
+from conf import DB
 
 
 ###############################################################################
 #                           CONSTANTS & GLOBALS
 ###############################################################################
 
-THEBEG	= 2
-ODD, EVEN, ALL = 1, 2, 4
-FUNC, FORM, OUT = 0, 1, 2
-A, R, B, Q, OR = 'A', 'R', 'B', 'Q', 'OR'
+AID = {}
 
-# FORM
-KEY		= 1		# Integer ID or string KEY
-DECIMAL	= 2		# Floating point number
-STRING	= 3		# String
-NULL	= 4		# Null
+# Global dictionary to cache key->id mappings
+
+GID = 999 # Default graph ID
+G = 1 # Virtual graph for names of operators
+
+I = {
+	'['   : 2,
+	']'   : 3,
+	'|'   : 4,
+	'=$'  : 5,
+	'=f'  : 6,
+	'=t'  : 7,
+	'=g'  : 8,
+	'=.'  : 9,
+	'>'   : 10,
+	'<'   : 11,
+	'>='  : 12,
+	'<='  : 13,
+	'!='  : 14,
+	';'   : 20,
+	' '   : 21,
+	'>>'  : 22,
+	'qry' : 65536,
+	'all' : 65537,
+	'nam' : 65538,
+	'key' : 65539,
+	'tit' : 65540,
+	'cor' : 1048576
+}
+
+# Lazy population for now
+K = {value: key for key, value in I.items()}
+
+START = 2
 
 # Each operator and its meaning
+FUNC, FORM, OUT = 0, 1, 2
+A, R, B, Q, OR = 'A', 'R', 'B', 'Q', 'OR'
+NULL	= 1		# Null
+KEY		= 2		# Integer ID or string KEY
+DECIMAL	= 3		# Floating point number
+INTEGER	= 4		# Floating point number
+STRING	= 5		# String
 OPR = {
-	I[';']: [A, KEY, False],
-	I[' ']: [A, KEY, False],
-	I['>>']: [A, KEY, False],
-	I['[']: [R, KEY, False],
-	I[']']: [B, KEY, False],
-	I['=t']: [Q, NULL, False],
-	I['=f']: [Q, NULL, False],
-	I['=g']: [Q, NULL, False],
-	I['=$']: [Q, STRING, '="'],
-	I['=.']: [Q, DECIMAL, '='],
-	I['>']: [Q, DECIMAL, False],
-	I['<']: [Q, DECIMAL, False],
-	I['>=']: [Q, DECIMAL, False],
-	I['<=']: [Q, DECIMAL, False],
-	I['!=']: [Q, DECIMAL, False],
-	I['|']: [OR, DECIMAL, ''],
+	I[';']  : [A, KEY, "\n"],
+	I[' ']  : [A, KEY, False],
+	I['>>'] : [A, KEY, False],
+	I['[']  : [R, KEY, False],
+	I[']']  : [B, KEY, False],
+	I['=t'] : [Q, NULL, False],
+	I['=f'] : [Q, NULL, False],
+	I['=g'] : [Q, NULL, False],
+	I['=$'] : [Q, STRING, '="'],
+	I['=.'] : [Q, DECIMAL, '='],
+	I['>']  : [Q, DECIMAL, False],
+	I['<']  : [Q, DECIMAL, False],
+	I['>='] : [Q, DECIMAL, False],
+	I['<='] : [Q, DECIMAL, False],
+	I['!='] : [Q, DECIMAL, False],
+	I['|']  : [OR, INTEGER, False],
 }
 
 # For decode()
-INCOMPLETE, INTERMEDIATE, COMPLETE = 1, 2, 3
+INCOMPLETE, SEMICOMPLETE, COMPLETE = 1, 2, 3
 OPSTR = {
 	'!'   : [INCOMPLETE, False],
-	'>'   : [INTERMEDIATE, I['>']],
-	'<'   : [INTERMEDIATE, I['<']],
-	'='   : [INTERMEDIATE, I['=.']],
+	'>'   : [SEMICOMPLETE, I['>']],
+	'<'   : [SEMICOMPLETE, I['<']],
+	'='   : [SEMICOMPLETE, I['=.']],
 	'=t'  : [COMPLETE, I['=t']],
 	'=f'  : [COMPLETE, I['=f']],
 	'=g'  : [COMPLETE, I['=g']],
@@ -61,60 +94,8 @@ OPSTR = {
 	';'   : [COMPLETE, I[';']],
 	' '   : [COMPLETE, I[' ']],
 	'>>'  : [COMPLETE, I['>>']],
+	'|'   : [COMPLETE, I['|']],
 }
-
-
-###############################################################################
-#                        DATABASE HELPER FUNCTIONS
-###############################################################################
-
-def select(query: str, params: list = []) -> list:
-	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pass']}") as conn:
-		cursor = conn.cursor()
-		cursor.execute(query, params)
-		rows=cursor.fetchall()
-		return [list(row) for row in rows]
-
-
-def insert(query: str, params: list = []):
-	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pass']}") as conn:
-		cursor = conn.cursor()
-		cursor.execute(query, params)
-
-
-def aggnum(col: str = 'aid', agg: str = 'MAX', table: str = None) -> int:
-	if not table: table=DB['table_meme']
-	result = select(f"SELECT {agg}({col}) FROM {table}")
-	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
-
-
-def selectin(cols: dict = {}, table: str = None) -> list:
-	if not table: table=DB['table_name']
-
-	conds = []
-	params = []
-
-	for col in cols:
-		conds.append(f"{col} IN ("+ ','.join(['%s'] * len(cols[col])) +")")
-		params.extend(cols[col])
-
-	if not conds: return []
-
-	return select(f"SELECT DISTINCT aid, bid, str FROM {table} WHERE " + ' AND '.join(conds), params)
-
-
-# Conbine SQL and parameters into a string
-def morfigy(sql: str, params: list) -> str:
-    for param in params:
-        rep = param.replace("'", "''") if isinstance(param, str) else str(param)
-        sql = sql.replace("%s", rep, 1)
-    return sql
-
-
-# Input: string "John Adams"
-# Output: lowercase underscored string "john_adams"
-def slugify(string: str) -> str:
-	return re.sub(r'__+', '_', re.sub(r'[^a-z0-9]', '_', string.lower())).strip('_')
 
 
 ###############################################################################
@@ -128,25 +109,25 @@ def decode(memestr: str) -> list:
 	memestr = re.sub(r'\s*//.*$', '', memestr, flags=re.MULTILINE).strip() # Remove comments
 	if len(memestr) == 0: raise Exception("Error: Empty query provided.")
 
-	tokens = [I['id'], I['mix']]
+	tokens = [G, G]
 	parts = re.split(r'(?<!\\)"', ';'+memestr)
 	for p, part in enumerate(parts):
 
 		# Quote
 		if p%2==1:
-			if tokens[-2] != I['=.']: raise Exception('Errant quote')
+			if OPR[tokens[-2]][FUNC] != Q: raise Exception('Errant quote')
 			tokens[-2], tokens[-1] = I['=$'], part
 			continue
 
 		# Memelang code
 		part = re.sub(r'[;\n]+', ';', part)					# Newlines are semicolons
 		part = re.sub(r'\s+', ' ', part)					# Remove multiple spaces
-		part = re.sub(r'\s*([#;!<>=]+)\s*', r'\1', part)	# Remove spaces around operators
+		part = re.sub(r'\s*([#;!<>=\|]+)\s*', r'\1', part)	# Remove spaces around operators
 		part = re.sub(r';+', ';', part)						# Remove multiple semicolons
 		part = re.sub(r';+$', '', part)						# Remove ending ;
 
 		# Split by operator characters
-		strtoks = re.split(r'([#;\[\]!><=\s])', part)
+		strtoks = re.split(r'([#;\[\]\|!><=\s:])', part)
 		tlen = len(strtoks)
 		t = 0
 		while t<tlen:
@@ -175,7 +156,7 @@ def decode(memestr: str) -> list:
 			# Key/Integer/Decimal
 			else:
 				if tokens[-1]!=None: raise Exception(f'Sequence error {tokens[-2]} {tokens[-1]} {strtok}')
-				if not re.search(r'[a-z0-9]', strtok): raise Exception(f"Unexpected '{strtok}' in {memestr}")
+				if not re.search(r'[a-zA-Z0-9]', strtok): raise Exception(f"Unexpected '{strtok}' in {memestr}")
 				if OPR[tokens[-2]][FORM]==DECIMAL: tokens[-1] = float(strtok)
 				elif re.match(r'-?[0-9]+', strtok): tokens[-1] = int(strtok)
 				else: tokens[-1] = strtok
@@ -183,21 +164,6 @@ def decode(memestr: str) -> list:
 			t+=1
 
 	return tokens
-
-
-# Input: tokens [operator1, operand1, operator2, operand2, ...]
-# Output: Memelang string "operator1operand1operator2operand2"
-def encode(tokens: list, fset={}) -> str:
-	memestr = ''
-
-	olen=len(tokens)
-	for o in range(THEBEG, olen, 2):
-		if o>THEBEG or tokens[o]!=I[';']: memestr += K[tokens[o]] if OPR[tokens[o]][OUT]==False else OPR[tokens[o]][OUT]
-		if OPR[tokens[o]][FORM] == STRING: memestr += str(tokens[o+1]) + '"'
-		elif OPR[tokens[o]][FORM] != NULL and tokens[o+1] is not None: memestr += str(tokens[o+1])
-	if fset.get('newline'): memestr=memestr.replace(";", "\n")
-
-	return memestr
 
 
 # Jump to next statement in tokens
@@ -253,7 +219,7 @@ def pack(tokens: list) -> int:
 # Output: list of integers [operator, operand]
 def unpack(bigint: int) -> list:
 	if bigint<1<<63:raise ValueError
-	pairs=[I['id'],I['id']]
+	pairs=[G, G]
 	while bigint>1<<63:
 		chunk = bigint&((1<<64)-1);
 		bigint >>= 64
@@ -269,6 +235,70 @@ def unpack(bigint: int) -> list:
 	return pairs
 
 
+# Input: tokens [operator1, operand1, operator2, operand2, ...]
+# Output: Memelang string "operator1operand1operator2operand2"
+def encode(tokens: list, fset={}) -> str:
+	memestr = ''
+	for o in range(START, len(tokens), 2):
+		if o>START or tokens[o]!=I[';']: memestr += K[tokens[o]] if OPR[tokens[o]][OUT]==False else OPR[tokens[o]][OUT]
+		if OPR[tokens[o]][FORM] == STRING: memestr += str(tokens[o+1]) + '"'
+		elif OPR[tokens[o]][FORM] != NULL and tokens[o+1] is not None: memestr += str(tokens[o+1])
+	return memestr
+
+
+###############################################################################
+#                        DATABASE HELPER FUNCTIONS
+###############################################################################
+
+def select(sql: str, params: list = []) -> list:
+	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pass']}") as conn:
+		cursor = conn.cursor()
+		cursor.execute(sql, params)
+		rows=cursor.fetchall()
+		return [list(row) for row in rows]
+
+
+def insert(sql: str, params: list = []):
+	with psycopg2.connect(f"host={DB['host']} dbname={DB['name']} user={DB['user']} password={DB['pass']}") as conn:
+		cursor = conn.cursor()
+		cursor.execute(sql, params)
+
+
+def aggnum(col: str = 'aid', agg: str = 'MAX', table: str = None) -> int:
+	if not table: table=DB['table_meme']
+	result = select(f"SELECT {agg}({col}) FROM {table}")
+	return int(0 if not result or not result[0] or not result[0][0] else result[0][0])
+
+
+def selectin(cols: dict = {}, table: str = None) -> list:
+	if not table: table=DB['table_meme']
+
+	conds = []
+	params = []
+
+	for col in cols:
+		conds.append(f"{col} IN ("+ ','.join(['%s'] * len(cols[col])) +")")
+		params.extend(cols[col])
+
+	if not conds: return []
+
+	return select(f"SELECT DISTINCT * FROM {table} WHERE " + ' AND '.join(conds), params)
+
+
+# Conbine SQL and parameters into a string
+def morfigy(sql: str, params: list) -> str:
+    for param in params:
+        rep = param.replace("'", "''") if isinstance(param, str) else str(param)
+        sql = sql.replace("%s", rep, 1)
+    return sql
+
+
+# Input: string "John Adams"
+# Output: lowercase underscored string "john_adams"
+def slugify(string: str) -> str:
+	return re.sub(r'__+', '_', re.sub(r'[^a-z0-9]', '_', string.lower())).strip('_')
+
+
 ###############################################################################
 #                           KEY <-> ID CONVERSIONS
 ###############################################################################
@@ -277,98 +307,201 @@ def unpack(bigint: int) -> list:
 # Load key->aids in I and K caches
 # I['john_adams']=123
 # K[123]='john_adams'
-def namecache(tokens: list, fld: str = 'str', name_table: str = None):
-	if not tokens: return
-	if not name_table: name_table=DB['table_name']
-
-	if fld=='str': uncaches = list(set([tok for tok in tokens if isinstance(tok, str) and tok not in I]))
-	elif fld=='aid': uncaches = list(set([tok for tok in tokens if isinstance(tok, int) and tok not in K]))
-	else: raise Exception('fld')
-
-	if not uncaches: return
-
-	rows=selectin({'bid':[I['key']], fld:uncaches}, name_table)
-
-	for row in rows:
-		I[row[2]] = int(row[0])
-		K[int(row[0])] = row[2]
-
-
-def identify(tokens: list = [], mode: int = ALL, name_table: str = None) -> list:
-	lookups=[]
-	tokids=[
-		I['id'] if mode!=ODD else tokens[0],
-		I['id'] if mode!=EVEN else tokens[1],
-	]
+def identify(tokens: list, gids: list[int] = []) -> list:
+	if not gids: gids = [GID]
+	allaids=I
+	for gid in gids:
+		if not AID.get(gid): AID[gid]={}
+		for q, a in AID[gid].items(): allaids.setdefault(q, a)
 
 	tlen = len(tokens)
 	if not tlen: return tokens
 
-	for t in range(THEBEG, tlen, 2):
+	lookups={}
+	tokids=[G, gids[-1]]
+
+	for t in range(START, tlen, 2):
 		operator, operand = tokens[t], tokens[t+1]
-		if isinstance(operator, str): operator = I[operator]
 		if isinstance(operand, str) and OPR[operator][FORM]==KEY:
-			if operand.startswith('-'): operand = operand[1:]
-			if not I.get(operand): lookups.append(operand)
+			operand=operand.lstrip('-')
+			if not allaids.get(operand): lookups[operand]=1
 
-	namecache(lookups, 'str', name_table)
+	if lookups:
+		rows=selectin({'qnt':lookups.keys(), 'rid':[I['nam']], 'bid':[I['key']], 'gid':gids}, DB['table_name'])
+		for row in rows: AID[int(row[0])][row[4]] = int(row[1])
 
-	for t in range(THEBEG, tlen, 2):
+		# must keep gid order
+		for gid in gids:
+			for q, a in AID[gid].items(): allaids.setdefault(q, a)
+
+	for t in range(START, tlen, 2):
 		operator, operand = tokens[t], tokens[t+1]
-		if isinstance(operator, str): operator = I[operator]
-		tokids.append(operator if mode!=ODD else tokens[t])
+		tokids.append(operator)
 		if operand is None: tokids.append(operand)
-		elif mode!=EVEN and isinstance(operand, str) and OPR[operator][FORM]==KEY:
-			tokids.append(I[operand] if not operand.startswith('-') else I[operand[1:]]*-1)
+		elif isinstance(operand, str) and OPR[operator][FORM]==KEY:
+			iid = allaids.get(operand.lstrip('-'),0)*(-1 if operand.startswith('-') else 1)
+			if iid == 0: raise Exception(f"identify error {operand}")
+			tokids.append(iid)
 		else: tokids.append(operand)
 
 	return tokids
 
 
-def keyify(tokens: list, mode: int = ODD, name_table: str = None) -> list:
-	lookups=[]
-	tokeys=[
-		I['key'] if mode!=ODD else tokens[0],
-		I['key'] if mode!=EVEN else tokens[1],
-	]
+def keyify(tokens: list, gids: list[int] = []) -> list:
+	if not gids: gids = [GID]
+	allstrs=K
+	for gid in gids:
+		if not AID.get(gid): AID[gid]={}
+		for q, a in AID[gid].items(): allstrs.setdefault(a, q)
 
 	tlen = len(tokens)
 	if not tlen: return tokens
 
-	for t in range(THEBEG, tlen, 2):
-		operator, operand = tokens[t], tokens[t+1]
-		if isinstance(operator, str): operator = I[operator]
-		if isinstance(operand, int) and OPR[operator][FORM]==KEY:
-			lookups.append(abs(operand))
+	lookups={}
+	tokeys=[G, gids[-1]]
 
-	namecache(lookups, 'aid', name_table)
-
-	for t in range(THEBEG, tlen, 2):
+	for t in range(START, tlen, 2):
 		operator, operand = tokens[t], tokens[t+1]
-		if isinstance(operator, str): operator = I[operator]
-		tokeys.append(K[operator] if mode!=ODD else tokens[t])
+		if operand is None: continue
+
+		elif isinstance(operand, int) and OPR[operator][FORM]==KEY:
+			operand=abs(operand)
+			if not allstrs.get(operand): lookups[operand]=1
+
+	if lookups:
+		rows=selectin({'aid':lookups.keys(), 'rid':[I['nam']], 'bid':[I['key']], 'gid':gids}, DB['table_name'])
+		for row in rows: AID[int(row[0])][row[4]] = int(row[1])
+
+		# must keep gid order
+		for gid in gids:
+			for q, a in AID[gid].items(): allstrs.setdefault(a, q)
+
+	for t in range(START, tlen, 2):
+		operator, operand = tokens[t], tokens[t+1]
+		tokeys.append(operator)
 		if operand is None: tokeys.append(operand)
-		elif mode!=EVEN and isinstance(operand, int) and OPR[operator][FORM]==KEY:
-			tokeys.append(K[operand] if operand>=0 else '-'+K[-1*operand])
+		elif isinstance(operand, int) and OPR[operator][FORM]==KEY:
+			sign=''
+			if operand<0:
+				sign='-'
+				operand*=-1
+			tokeys.append(sign+allstrs[operand])
 		else: tokeys.append(operand)
 
 	return tokeys
+
+
+# Run decode() and identify()
+def idecode(memestr: str, gids: list[int] = []) -> list:
+	return identify(decode(memestr), gids)
+
+
+# Run keyify() and encode()
+def keyencode(tokens: list, gids: list[int] = []) -> str:
+	return encode(keyify(tokens, gids))
 
 
 ###############################################################################
 #                         MEMELANG -> SQL QUERIES
 ###############################################################################
 
+# Input: tokens
+# Output: SELECT string, FROM string, WHERE string, and depth int
+def selectify(tokens: list, gids: list[int] = [], fset={}) -> tuple[str, list]:
+	if not gids: gids = [GID]
+
+	if len(gids)==1: gstr = f"={gids[0]}"
+	else: gstr = " IN (" + ",".join(str(g) for g in gids) + ")"
+
+	joins=[
+		{'inv': False, 'tbl':DB['table_meme']}
+	]
+
+	qparts = {
+		'select': [f"(A0) AS a0", f"concat_ws(' ', ';', (A0)"],
+		'join': [],
+		'where': [],
+		'gid': [f"m0.gid{gstr}"]
+	}
+
+	params = []
+	m = 0
+	cpr = '=.'
+
+	olen=len(tokens)
+	for o in range(0, olen, 2):
+		operator = tokens[o]
+		operand = tokens[o+1]
+		func = OPR[operator][FUNC]
+		form = OPR[tokens[o]][FORM]
+
+		# Starting A
+		if o==0:
+			if func == B: # HACK
+				joins[0]['inv']=True
+				func = A
+			elif func != A: raise Exception('A error')
+
+		# Chained [R[R or ]B]B or [R[]R
+		if o>2 and (func == R or (func == B and OPR[tokens[o-2]][FUNC] == B)):
+			qparts['select'][1] += f", {I['[']}, (R{m})"
+			if OPR[tokens[o-2]][FUNC] == B: qparts['select'][1] += f", {I[']']}, (B{m})"
+
+			m+=1
+			qparts['where'].append(f"m{m}.gid{gstr}")
+			joins.append({'inv': False, 'tbl':DB['table_meme']})
+
+		# [R
+		if func == R and str(operand).startswith('-'): joins[m]['inv']=True
+
+		# where
+		if operand is not None:
+			if form == DECIMAL:
+				cpr=K[operator] if not OPR[operator][OUT] else OPR[operator][OUT]
+				qparts['where'].append(f"m{m}.qnt{cpr}%s")
+				params.append(operand)
+			elif form == KEY:
+				qparts['where'].append(f"({func}{m})=%s")
+				params.append(operand)
+			elif form == STRING:
+				joins[m]['tbl']=DB['table_name']
+				qparts['where'].append(f"m{m}.qnt LIKE %s")
+				params.append(f"{operand}")
+
+	if fset.get('aidselect'): qparts['select'].pop(1)
+	else: 
+		cpr = I['=$'] if joins[-1]['tbl']==DB['table_name'] else I['=.']
+		qparts['select'][1] += f", {I['[']}, (R{m}), {I[']']}, (B{m}), COALESCE( '{cpr} ' || m{m}.qnt::text)) AS arbq"
+
+	for m, join in enumerate(joins):
+		if m==0: qparts['join'].append(f" FROM {join['tbl']} m{m}")
+		else: qparts['join'].append(f" JOIN {join['tbl']} m{m} ON (B{m-1})=(A{m})")
+
+	for m, join in enumerate(joins):
+		inv = join['inv']
+		for qpart in qparts:
+			for p, _ in enumerate(qparts[qpart]):
+				acol = 'aid' if not inv else 'bid'
+				bcol = 'bid' if not inv else 'aid'
+				rcol = 'rid' if not inv else 'rid*-1'
+				qparts[qpart][p]=qparts[qpart][p].replace(f"(A{m})", f"m{m}.{acol}").replace(f"(R{m})", f"m{m}.{rcol}").replace(f"(B{m})", f"m{m}.{bcol}")
+		
+	return ('SELECT '
+		+ ', '.join(qparts['select'])
+		+ ' '.join(qparts['join'])
+		+ ' WHERE ' + (' AND '.join(qparts['where']+qparts['gid']))
+	), params
+
+
 # Input: Memelang query string
 # Output: SQL query string
-def querify(tokens: list, meme_table: str = None) -> tuple[str, list]:
-	if not meme_table: meme_table=DB['table_meme']
+def querify(tokens: list, gids: list[int] = []) -> tuple[str, list]:
 
 	ctes, selects, params = [], [], []
 	cte_beg, cte_end = 0, 0
 
 	beg = 0
-	end = THEBEG
+	end = START
 	while (end := nxt(tokens, (beg := end)))>0: # Split by ;
 
 		trues={}
@@ -382,17 +515,17 @@ def querify(tokens: list, meme_table: str = None) -> tuple[str, list]:
 			if OPR[tokens[o]][FUNC] == A and tokens[o+1] == I['qry']:
 				skip=True	
 				if o+3 < end and tokens[o+3]=='all':
-					qry_select, qry_params = selectify([I[']']])
+					qry_select, qry_params = selectify([I[']'], gids])
 					ret_selects.append(f"{qry_select} WHERE m0.aid IN (SELECT a0 FROM ZLAST)")
 
 			elif o==end-2 or OPR[tokens[o+2]][FUNC]==A:
 				if tokens[o] == I['=f']: # False
-					qry_select, qry_params = selectify(tokens[beg:o+2], {'aidselect':True})
+					qry_select, qry_params = selectify(tokens[beg:o+2], gids, {'aidselect':True})
 					not_where += f" AND m0.aid NOT IN ({qry_select})"
 					not_params.extend(qry_params)
 
 				elif tokens[o] == I['=g']: # Get
-					qry_select, qry_params = selectify(tokens[beg:o+2])
+					qry_select, qry_params = selectify(tokens[beg:o+2], gids)
 					ret_selects.append(f"{qry_select} AND a0 IN (SELECT a0 FROM ZLAST)")
 					params.extend(qry_params)
 
@@ -406,8 +539,8 @@ def querify(tokens: list, meme_table: str = None) -> tuple[str, list]:
 
 		for gnum in trues:
 			or_selects = []
-			for beg, end in trues[gnum]:
-				qry_select, qry_params = selectify(tokens[beg:end])
+			for beg1, end1 in trues[gnum]:
+				qry_select, qry_params = selectify(tokens[beg1:end1], gids)
 
 				if cte_end==cte_beg:
 					qry_select += not_where
@@ -418,246 +551,164 @@ def querify(tokens: list, meme_table: str = None) -> tuple[str, list]:
 				or_selects.append(qry_select)
 				params.extend(qry_params)
 
+				# FIX LATER
+				# Also get inverse for A query
+				if (end1-beg1) == 2 and OPR[tokens[beg1]][FUNC] == A:
+					qry_select, qry_params = selectify([I[']'], tokens[beg1+1]], gids)
+					or_selects.append(qry_select)
+					params.extend(qry_params)
+
 			cte_end += 1
 			ctes.append(f"z{cte_end} AS ({' UNION '.join(or_selects)})")
 
 		for cte_cnt in range(cte_beg, cte_end):
-			ret_selects.append(f"SELECT arbcq FROM z{cte_cnt+1}" + ('' if cte_cnt+1 == cte_end else f" WHERE a0 IN (SELECT a0 FROM ZLAST)"))
+			ret_selects.append(f"SELECT arbq FROM z{cte_cnt+1}" + ('' if cte_cnt+1 == cte_end else f" WHERE a0 IN (SELECT a0 FROM ZLAST)"))
 
 		selects.extend([ret_select.replace('ZLAST', f"z{cte_end}") for ret_select in ret_selects])
 
-
-	sql = 'WITH ' + ', '.join(ctes) + " SELECT string_agg(arbcq, ' ') AS arbcq FROM (" + ' UNION '.join(selects) + ')'
-	sql = sql.replace('MEMETABLE', meme_table)
+	sql = 'WITH ' + ', '.join(ctes) + " SELECT string_agg(arbq, ' ') AS arbq FROM (" + ' UNION '.join(selects) + ')'
 
 	return sql, params
 
 
-# Input: tokens
-# Output: SELECT string, FROM string, WHERE string, and depth int
-def selectify(tokens: list, fset={}) -> tuple[str, list]:
+# Input: Memelang string
+# Saves to DB
+# Output: Memelang string
+def put (memestr: str, gids: list[int] = []) -> str:
+	meme_table=DB['table_meme']
+	name_table=DB['table_name']
 
-	qparts = {
-		'select': [f"(A0) AS a0", f"concat_ws(' ', ';', (A0)"],
-		'join': [f" FROM MEMETABLE m0"],
-		'where': []
-	}
+	if not gids: gids = [GID]
+	gid=gids[-1]
+	if gid not in AID: AID[gid]={}
 
-	params = []
-	inversions = [False]
-	m = 0
-	cpr = '=.'
+	tokens = decode(memestr)
+	olen = len(tokens)
 
-	olen=len(tokens)
-	for o in range(0, olen, 2):
-		operator = tokens[o]
-		operand = tokens[o+1]
-		func = OPR[operator][FUNC]
-
-		# Starting A
-		if o==0:
-			if func != A: raise Exception('A error')
-
-		# [R
-		elif func == R and str(operand).startswith('-'): inversions[m]=True
-
-		# Chained [R[R or ]B]B or [R[]R
-		if o>2 and (func == R or (func == B and OPR[tokens[o-2]][FUNC] == B)):
-			qparts['select'][1] += f", {I['[']}, (R{m})"
-			if OPR[tokens[o-2]][FUNC] == B: qparts['select'][1] += f", {I[']']}, (B{m})"
-
-			m+=1
-			qparts['join'].append(f"JOIN MEMETABLE m{m} ON (B{m-1})=(A{m})")
-			inversions.append(False)
-
-		# where
-		if operand is not None:
-			if operator in (I['=t'],I['=f'],I['=g']): pass
-			elif func == Q:
-				cpr=K[operator] if not OPR[operator][OUT] else OPR[operator][OUT]
-				qparts['where'].append(f"m{m}.qnt{cpr}%s")
-				params.append(operand)
-			elif func in (A,R,B):
-				qparts['where'].append(f"({func}{m})=%s")
-				params.append(operand)
-
-	if fset.get('aidselect'): qparts['select'].pop(1)
-	else: 
-		qparts['select'][1] += f", {I['[']}, (R{m}), {I[']']}, (B{m}), m{m}.cpr, m{m}.qnt) AS arbcq"
-
-	for i,inv in enumerate(inversions):
-		for qpart in qparts:
-			for p, _ in enumerate(qparts[qpart]):
-				acol = 'aid' if not inv else 'bid'
-				bcol = 'bid' if not inv else 'aid'
-				rcol = 'rid' if not inv else 'rid*-1'
-				qparts[qpart][p]=qparts[qpart][p].replace(f"(A{i})", f"m{i}.{acol}").replace(f"(R{i})", f"m{i}.{rcol}").replace(f"(B{i})", f"m{i}.{bcol}")
-		
-	return ('SELECT '
-		+ ', '.join(qparts['select'])
-		+ ' '.join(qparts['join'])
-		+ ('' if not qparts['where'] else ' WHERE ' + ' AND '.join(qparts['where']))
-	), params
-
-
-
-def put (tokens: list, meme_table: str = None, name_table: str = None):
-	if not meme_table: meme_table=DB['table_meme']
-	if not name_table: name_table=DB['table_name']
-
-	namecache(tokens, 'str', name_table)
-
-	missings = {}
 	sqls = {meme_table:[], name_table:[]}
 	params = {meme_table:[], name_table:[]}
 
-	# Swap keys with IDs or mark key missing
-	olen=len(tokens)
-	for o in range(THEBEG, olen, 2):
-		if OPR[tokens[o]][FORM]==DECIMAL: tokens[o+1]=float(tokens[o+1])
-		elif OPR[tokens[o]][FORM]==KEY and isinstance(tokens[o+1], str):
-			operand=tokens[o+1]
-			if operand.startswith('-'): 
-				operand=operand[1:]
-				sign=-1
-			else: sign=1
+	# NEW KEY NAMES
 
-			if operand.isdigit(): tokens[o+1]=int(tokens[o+1])
-			elif I.get(operand): tokens[o+1]=I[operand]*sign
-			else: missings[operand]=1
+	newkeys = {}
 
-	# Mark id-key for writing from id[nam]key="xyz"
-	end = THEBEG
-	while (end := nxt(tokens, (beg := end)))>0:
-		if tokfit(tokens[beg:end], [A, False, R, I['nam'], B, I['key'], I['=$'], False]):
-			aid = tokens[beg+1]
-			key = tokens[beg+7]
-			missings.pop(key, None)
-			sqls[name_table].append("(%s,%s,%s)")
-			params[name_table].extend([aid, I['key'], key])
-			I[key]=aid
-			K[aid]=key
+	# Pull out string keys
+	for o in range(START, olen, 2):
+		operand = tokens[o+1]
+		form = OPR[tokens[o]][FORM]
 
-	# Select new ID for missing keys with no associated ID
-	aid = aggnum('aid', 'MAX', name_table) or I['cor']
-	if missings:
-		for key, val in missings.items():
-			aid += 1
-			sqls[name_table].append("(%s,%s,%s)")
-			params[name_table].extend([aid, I['key'], key])
-			I[key]=aid
-			K[aid]=key
+		if form == STRING: 
+			if o>=8 and tokfit(tokens[o-6:o+2], [A, False, R, I['nam'], B, I['key'], I['=$'], False]):
+				newkeys[tokens[o+1].lower()] = tokens[o-5]
+
+		elif form == KEY and isinstance(operand, str):
+			iid = AID[gid].get(operand.lstrip('-'),0)*(-1 if operand.startswith('-') else 1)
+			if iid != 0: tokens[o+1]=iid
+			else: 
+				quo = tokens[o+1].lstrip('-').lower()
+				if not newkeys.get(quo): newkeys[quo] = 0.5
+
+	# Unique check keys
+	rows=selectin({'gid':[gid], 'rid':[I['nam']], 'bid':[I['key']], 'qnt':newkeys.keys()}, DB['table_name'])
+	for row in rows:
+		quo=row[4]
+		if newkeys.get(quo):
+			if int(row[1]) == int(newkeys[quo]) or isinstance(newkeys[quo], float): newkeys.pop(quo, 0)
+			else: raise Exception(f"Duplicate key {quo} for new {newkeys[quo]} and old {row[1]}")
+
+	# Write new keys
+	aidmax = aggnum('aid', 'MAX', name_table) or I['cor']
+	for quo in newkeys:
+
+		if re.search(r'[^a-z0-9_]', quo) or not re.search(r'[a-z]', quo):
+			raise Exception(f'Invalid key {quo}')
+
+		kid = int(newkeys[quo])
+		if not kid:
+			aidmax += 1
+			kid = aidmax
+		elif kid<=I['cor']: raise Exception(f'Invalid id number {kid}')
+
+		AID[gid][quo]=kid
+		sqls[name_table].append("(%s,%s,%s,%s,%s)")
+		params[name_table].extend([gid, kid, I['nam'], I['key'], quo])
 
 	# Swap missing keys for new IDs
-	for o in range(THEBEG, olen, 2):
-		if OPR[tokens[o]][FORM]==KEY and isinstance(tokens[o+1], str):
-			if tokens[o+1].startswith('-'): tokens[o+1]=I[tokens[o+1][1:]]*-1
-			else: tokens[o+1]=I[tokens[o+1]]
+	tokens=identify(tokens, gids)
+	
+	# NEW MEMES
 
-	# Pull out non-key names and truths
-	end=THEBEG
+	end=START
 	while (end := nxt(tokens, (beg := end)))>0:
 		if end-beg==0: continue
 
-		# A[nam]B = "String"
-		elif tokfit(tokens[beg:end], [A, False, R, I['nam'], B, False, I['=$'], False]):
-			if tokens[beg+5]!=I['key']:
-				params[name_table].extend([tokens[beg+1], tokens[beg+5], tokens[beg+7]])
-				sqls[name_table].append('(%s,%s,%s)')
+		# A[R]B ..
+		elif tokfit(tokens[beg:beg+6], [A, False, R, False, B, False]):
 
-		# A[R]B
-		elif tokfit(tokens[beg:end], [A, False, R, False, B, False]):
-			params[meme_table].extend([tokens[beg+1],tokens[beg+3],tokens[beg+5],I['=t'],None])
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+			# Invert R
+			if tokens[beg+3]<0:
+				tokens[beg+3]*=-1
+				tokens[beg+1], tokens[beg+5] = tokens[beg+5], tokens[beg+1]
 
-		# A[R]B=Q
-		elif tokfit(tokens[beg:end], [A, False, R, False, B, False, I['=.'], False]):
-			params[meme_table].extend([tokens[beg+1],tokens[beg+3],tokens[beg+5],tokens[beg+6],tokens[beg+7]])
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+			# A[R]B;
+			if end == beg+6:
+				params[meme_table].extend([gid, tokens[beg+1], tokens[beg+3], tokens[beg+5], None])
+				sqls[meme_table].append('(%s,%s,%s,%s,%s)')	
 
-		# [Ry]By >> Rz[Bz]
-		# -By[Ry]X = t
-		# -X[Rz]Bz = t
-		elif tokfit(tokens[beg:end], [A, None, R, False, B, False, I['>>'], None, R, False, B, False]):
-			aid+=1
-			sqls[name_table].append("(%s,%s,%s)")
-			params[name_table].extend([aid, I['key'], f'VAR{aid}'])
+			# A[nam]B = "String"
+			elif tokens[beg+6] == I['=$']:
+				if tokens[beg+5]!=I['key']:
+					params[meme_table].extend([gid, tokens[beg+1], I['nam'], tokens[beg+5], tokens[beg+7]])
+					sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
-			params[meme_table].extend([tokens[beg+5]*-1, tokens[beg+3]*-1, aid, I['=t'], None])
-			params[meme_table].extend([aid*-1, tokens[beg+9], tokens[beg+11], I['=t'], None])
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+			# A[R]B=Q and A[R]B=t
+			elif tokens[beg+6] in (I['=t'], I['=.']):
+				params[meme_table].extend([gid, tokens[beg+1], tokens[beg+3], tokens[beg+5], tokens[beg+7]])
+				sqls[meme_table].append('(%s,%s,%s,%s,%s)')
 
-		# [Ry]By=t >> Rz[Bz]=t
-		# -By[Ry]X = t
-		# -X[Rz]Bz = t
-		elif tokfit(tokens[beg:end], [A, None, R, False, B, False, Q, False, I['>>'], None, R, False, B, False, Q, False]):
-			aid+=1
-			sqls[name_table].append("(%s,%s,%s)")
-			params[name_table].extend([aid, I['key'], f'VAR{aid}'])
+			else: raise Exception('Could not put tokens: ' + keyencode(tokens[beg:end], [gid]))
 
-			params[meme_table].extend([tokens[beg+5]*-1, tokens[beg+3]*-1, aid, tokens[beg+6], tokens[beg+7]])
-			params[meme_table].extend([aid*-1, tokens[beg+11], tokens[beg+13], tokens[beg+14], tokens[beg+15]])
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
-			sqls[meme_table].append('(%s,%s,%s,%s,%s)')
+		# TO DO: WRITE TO IMPL TABLE
 
-		else:
-			print('TOKENS:', [tok if not K.get(tok) else K[tok] for tok in tokens[beg:end]])
-			raise Exception('Could not write')
+		else: raise Exception('Could not put tokens: ' + keyencode(tokens[beg:end], [gid]))
 
 	for tbl in params:
-		if params[tbl]:
-			insert(f"INSERT INTO {tbl} VALUES " + ','.join(sqls[tbl]) + " ON CONFLICT DO NOTHING", params[tbl])
+		if params[tbl]: insert(f"INSERT INTO {tbl} VALUES " + ','.join(sqls[tbl]) + " ON CONFLICT DO NOTHING", params[tbl])
 
-	return tokens
+	return keyencode(tokens, [gid])
 
-
-###############################################################################
-#                         MEMELANG -> SQL -> EXECUTE
-###############################################################################
 
 # Input: Memelang query string
-# Output: list of tokens match query from DB
-def query(memestr: str, bid: int = None, meme_table: str = None, name_table: str = None) -> list:
+# Output: Memelang results string
+def query(memestr: str = None, gids: list[int] = []) -> str:
+	if not gids: gids = [GID]
 
-	tokens = identify(decode(memestr), ALL, name_table)
-	sql, params = querify(tokens, meme_table)
+	tokens = idecode(memestr, gids)
+	sql, params = querify(tokens, gids)
 	res = select(sql, params)
-	if not res or not res[0] or not res[0][0]: return []
 
-	tokens=[I['id'], I['id']]
+	if not res or not res[0] or not res[0][0]: return ''
+
+	tokens=[G, gids[-1]]
 
 	strtoks=res[0][0].split()
 	for tok in strtoks:
-		if tok == '': continue
-		elif tok==';': tokens.append(I[';'])
+		if tok==';': tokens.append(I[';'])
 		elif '.' in tok: tokens.append(float(tok))
+		elif re.search(r'[a-z]', tok): tokens.append(tok)
 		else: tokens.append(int(tok))
 
-	if bid==I['key']: return keyify(tokens, ODD, name_table)
-	return tokens
+	return keyencode(tokens, gids)
 
 
-# Return meme count of above results
-def count(memestr: str, meme_table: str = None, name_table: str = None) -> int:
-	tokens = identify(decode(memestr), ALL, name_table)
-	sql, params = querify(tokens, meme_table)
+# Input: Memelang query string
+# Output: Integer count of resulting memes
+def count(memestr: str, gids: list[int] = []) -> int:
+	if not gids: gids = [GID]
+	tokens = idecode(memestr, gids)
+	sql, params = querify(tokens, gids)
 	res=select(sql, params)
 	return 0 if not res or not res[0] or not res[0][0] else res[0][0].count(';')
-
-
-###############################################################################
-#                                FILE I/O
-###############################################################################
-
-def read (file_path: str) -> list:
-	with open(file_path, 'r', encoding='utf-8') as f: tokens = decode(f.read())
-	return tokens
-
-
-def write (file_path: str, tokens: list):
-	with open(file_path, 'w', encoding='utf-8') as file:
-		file.write(encode(tokens, {'newline':True}))
 
 
 ###############################################################################
@@ -676,23 +727,22 @@ def cli_query(memestr):
 	print ("TOKENS:", tokens)
 	print ("QUERY:", encode(tokens))
 
-	sql, params = querify(identify(tokens))
+	tokens = idecode(memestr)
+	sql, params = querify(tokens)
 	full_sql = morfigy(sql, params)
 	print(f"SQL: {full_sql}\n")
 
 	# Execute query
 	print(f"RESULTS:")
-	print(encode(query(memestr, I['key']), {'newline':True}))
+	print(query(memestr))
 	print()
 	print()
 
 
 # Read a meme file and save it to DB
 def cli_putfile(file_path):
-	tokens = read(file_path)
-	tokens = put(tokens)
-	print(encode(keyify(tokens), {'newline':True}))
-
+	with open(file_path, 'r', encoding='utf-8') as f: print(put(f.read()))
+	
 
 # Test various Memelang queries
 def cli_qrytest():
@@ -727,6 +777,7 @@ def cli_qrytest():
 		'[spouse]',
 		'[spouse] [child]',
 		'[birth[year]adyear>=1800 [birth][year]adyear<1900',
+		'[spouse [birth[year]adyear>=1900|1 [birth][year]adyear<1800|1',
 		'[spouse [child [birth[year]adyear<1900',
 		'george_washington; john_adams',
 		'george_washington;; john_adams;; ; thomas_jefferson;',
@@ -734,16 +785,16 @@ def cli_qrytest():
 	errcnt=0
 
 	for memestr in queries:
-		tokens = decode(memestr)
-		print('Tokens:', keyify(tokens, ALL))
+		print('Tokens:', decode(memestr))
 		print('Query 1:', memestr)
+		memestr2=memestr
 
 		for i in range(2,4):
-			memestr2 = encode(keyify(unpack(pack(identify(tokens, ALL)))))
+			memestr2 = keyencode(unpack(pack(idecode(memestr2)))).replace("\n", ";")
 			print(f'Query {i}:', memestr2)
-			tokens = decode(memestr2)
 
-		sql, params = querify(identify(tokens))
+		tokens = idecode(memestr)
+		sql, params = querify(tokens)
 		print('SQL: ', morfigy(sql, params))
 		
 		c1=count(memestr)
@@ -777,8 +828,9 @@ def cli_dbadd():
 # Add database table
 def cli_tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_meme']} (aid BIGINT, rid BIGINT, bid BIGINT, cpr SMALLINT, qnt DECIMAL(20,6)); CREATE UNIQUE INDEX {DB['table_meme']}_aid_idx ON {DB['table_meme']} (aid,rid,bid); CREATE INDEX {DB['table_meme']}_rid_idx ON {DB['table_meme']} (rid); CREATE INDEX {DB['table_meme']}_bid_idx ON {DB['table_meme']} (bid);\"",
-		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_name']} (aid BIGINT, bid BIGINT, str VARCHAR(511)); CREATE UNIQUE INDEX {DB['table_name']}_aid_idx ON {DB['table_name']} (aid,bid,str); CREATE INDEX {DB['table_name']}_str_idx ON {DB['table_name']} (str);\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_meme']} (gid BIGINT, aid BIGINT, rid BIGINT, bid BIGINT, qnt DOUBLE PRECISION); CREATE UNIQUE INDEX {DB['table_meme']}_aid_idx ON {DB['table_meme']} (gid,aid,rid,bid); CREATE INDEX {DB['table_meme']}_rid_idx ON {DB['table_meme']} (rid); CREATE INDEX {DB['table_meme']}_bid_idx ON {DB['table_meme']} (bid);\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_impl']} (gid BIGINT, rid1 BIGINT, bid1 BIGINT, cpr1 SMALLINT, qnt1 DOUBLE PRECISION, rid2 BIGINT, bid2 BIGINT, cpr2 SMALLINT, qnt2 DOUBLE PRECISION); CREATE UNIQUE INDEX {DB['table_impl']}_aid_idx ON {DB['table_impl']} (gid,rid1,bid1); CREATE INDEX {DB['table_impl']}_bid_idx ON {DB['table_impl']} (bid1);\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_name']} (gid BIGINT, aid BIGINT, rid BIGINT, bid BIGINT, qnt VARCHAR(511)); CREATE INDEX {DB['table_name']}_aid_idx ON {DB['table_name']} (gid,aid,rid,bid); CREATE UNIQUE INDEX {DB['table_name']}_qnt_idx ON {DB['table_name']} (qnt);\"",
 		f"sudo -u postgres psql -d {DB['name']} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB['table_meme']} TO {DB['user']};\"",
 		f"sudo -u postgres psql -d {DB['name']} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB['table_name']} TO {DB['user']};\"",
 	]
@@ -798,15 +850,6 @@ def cli_tabledel():
 		print(command)
 		os.system(command)
 
-
-# Save aid->key relations in conf.py to name DB table
-def cli_coreadd():
-	memestr=''
-	for key in I: memestr+=f'{I[key]}[nam]key="{key}";'
-	tokens = identify(decode(memestr))
-	print(encode(put(tokens), {'newline':True}))
-
-
 if __name__ == "__main__":
 	LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -817,16 +860,13 @@ if __name__ == "__main__":
 	elif cmd in ('dbadd','adddb'): cli_dbadd()
 	elif cmd in ('tableadd','addtable'): cli_tableadd()
 	elif cmd in ('tabledel','deltable'): cli_tabledel()
-	elif cmd in ('coreadd','addcore'): cli_coreadd()
 	elif cmd == 'qrytest': cli_qrytest()
 	elif cmd == 'install':
 		cli_dbadd()
 		cli_tableadd()
-		cli_coreadd()
 	elif cmd == 'reinstall':
 		cli_tabledel()
 		cli_tableadd()
-		cli_coreadd()
 		if len(sys.argv)>2 and sys.argv[2]=='-presidents': cli_putfile(os.path.join(LOCAL_DIR,'presidents.meme'))
 	elif cmd in ('fileall','allfile'):
 		files = glob.glob(LOCAL_DIR+'/*.meme') + glob.glob(LOCAL_DIR+'/data/*.meme')
