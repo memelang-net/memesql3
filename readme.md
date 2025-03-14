@@ -33,36 +33,41 @@ Read the [full documentation here](https://memelang.net/03/).
 Relations are stores in the `meme` table. Each node and edge is given an integer ID number for compact storage.
 
 	CREATE TABLE meme (
+	 gid BIGINT, 
 	 aid BIGINT, 
 	 rid BIGINT, 
 	 bid BIGINT, 
-	 cpr SMALLINT, 
-	 qnt DECIMAL(20,6)
+	 qnt DOUBLE PRECISION
 	);
 
 
 | Column | Description                                                                           |
 |-------:|:--------------------------------------------------------------------------------------|
-| aid  | **A** node ID of the relation (john_adams).                                                       |
-| rid  | **R** edge ID (college).                                    |
-| bid  | **B** node ID of the relation (harvard).                                                        |
-| cpr  | Comparison operator ID, typically `=`, but can be `<`, `>`, `<=`, etc. |
-| qnt  | **Quantity** (0 = false, 1 = true, or other numeric values). |
+| gid  | Represents the graph ID, equivilant to a table/database.                                |
+| aid  | **A** node ID of the relation (john_adams).                                             |
+| rid  | **R** edge ID (college).                                                                |
+| bid  | **B** node ID of the relation (harvard).                                                |
+| cpr  | Comparison operator ID, typically `=`, but can be `<`, `>`, `<=`, etc.                  |
+| qnt  | **Quantity** (0 = false, 1 = true, or other numeric values).                            |
 
 
 String names for nodes and edges are stored in the `name` table:
 
 	CREATE TABLE name (
+	 gid BIGINT, 
 	 aid BIGINT, 
+	 rid BIGINT, 
 	 bid BIGINT, 
-	 str VARCHAR(511)
+	 qnt VARCHAR(511)
 	);
 
-| Column | Description                                                                |
-|-------:|:---------------------------------------------------------------------------|
+| Column | Description                                                              |
+|-------:|:-------------------------------------------------------------------------|
+| gid  | Represents the graph ID, equivilant to a table/database.                   |
 | aid  | Numeric ID (matching the `aid` in the `meme` table).                       |
-| bid  | Numeric ID representing the **type** of name (e.g., full name, short name).|
-| str  | The actual **string name** for the entity (e.g., "John Adams").            |
+| rid  | Will always be identifier for `nam`.                                       |
+| bid  | Numeric ID representing the type of name (e.g., full name, short name).    |
+| qnt  | The actual string name for the entity (e.g., "John Adams").                |
 
 
 ## Files
