@@ -51,7 +51,7 @@ START = 2
 
 # Each operator and its meaning
 FUNC, FORM, OUT = 0, 1, 2
-A, R, B, Q, OR = 'A', 'R', 'B', 'Q', 'OR'
+A, R, B, C, Q, OR = 'A', 'R', 'B', 'C', 'Q', 'OR'
 NULL	= 1		# Null
 KEY		= 2		# Integer ID or string KEY
 DECIMAL	= 3		# Floating point number
@@ -410,86 +410,87 @@ def keyencode(tokens: list, gids: list[int] = []) -> str:
 def selectify(tokens: list, gids: list[int] = [], fset={}) -> tuple[str, list]:
 	if not gids: gids = [GID]
 
-	if len(gids)==1: gstr = f"={gids[0]}"
-	else: gstr = " IN (" + ",".join(str(g) for g in gids) + ")"
-
-	joins=[
-		{'inv': False, 'tbl':DB['table_meme']}
-	]
-
-	qparts = {
-		'select': [f"(A0) AS a0", f"concat_ws(' ', ';', (A0)"],
-		'join': [],
-		'where': [],
-		'gid': [f"m0.gid{gstr}"]
-	}
-
-	params = []
-	m = 0
-	cpr = '=.'
+	joins=[{
+		'inv' : False,
+		'sel' : {A:True, R:True, B:False, Q:False},
+		'whr' : {'gid': gids, C: I['=.']}
+	}]
 
 	olen=len(tokens)
 	for o in range(0, olen, 2):
-		operator = tokens[o]
-		operand = tokens[o+1]
-		func = OPR[operator][FUNC]
-		form = OPR[tokens[o]][FORM]
+		operator, operand = tokens[o], tokens[o+1]
+		func, form = OPR[operator][FUNC], OPR[operator][FORM]
 
-		# Starting A
-		if o==0:
-			if func == B: # HACK
-				joins[0]['inv']=True
-				func = A
-			elif func != A: raise Exception('A error')
-
-		# Chained [R[R or ]B]B or [R[]R
+		# Chained [R[R or ]B]B or [R][R
 		if o>2 and (func == R or (func == B and OPR[tokens[o-2]][FUNC] == B)):
-			qparts['select'][1] += f", {I['[']}, (R{m})"
-			if OPR[tokens[o-2]][FUNC] == B: qparts['select'][1] += f", {I[']']}, (B{m})"
+			joins.append({
+				'inv' : False,
+				'sel' : {},
+				'whr' : {'gid': gids, C: I['=.']}
+			})
 
-			m+=1
-			qparts['where'].append(f"m{m}.gid{gstr}")
-			joins.append({'inv': False, 'tbl':DB['table_meme']})
+		if func in (A,R,B):
+			if isinstance(operand, int) and operand<=0: joins[-1]['inv']=True
+			if operand is not None: joins[-1]['whr'][func]=abs(operand)
+			joins[-1]['sel'][func]=True
 
-		# [R
-		if func == R and str(operand).startswith('-'): joins[m]['inv']=True
+		elif func == Q:
+			joins[-1]['whr'][C]=operator
+			if operand is not None: joins[-1]['whr'][Q]=operand
 
-		# where
-		if operand is not None:
-			if form == DECIMAL:
-				cpr=K[operator] if not OPR[operator][OUT] else OPR[operator][OUT]
-				qparts['where'].append(f"m{m}.qnt{cpr}%s")
-				params.append(operand)
-			elif form == KEY:
-				qparts['where'].append(f"({func}{m})=%s")
-				params.append(operand)
-			elif form == STRING:
-				joins[m]['tbl']=DB['table_name']
-				qparts['where'].append(f"m{m}.qnt LIKE %s")
-				params.append(f"{operand}")
+	# Always select last B=Q
+	joins[-1]['sel'][B]=True
+	joins[-1]['sel'][Q]=True
 
-	if fset.get('aidselect'): qparts['select'].pop(1)
-	else: 
-		cpr = I['=$'] if joins[-1]['tbl']==DB['table_name'] else I['=.']
-		qparts['select'][1] += f", {I['[']}, (R{m}), {I[']']}, (B{m}), COALESCE( '{cpr} ' || m{m}.qnt::text)) AS arbq"
-
-	for m, join in enumerate(joins):
-		if m==0: qparts['join'].append(f" FROM {join['tbl']} m{m}")
-		else: qparts['join'].append(f" JOIN {join['tbl']} m{m} ON (B{m-1})=(A{m})")
-
+	froms, wheres, params = [], [], []
+	aselect, select, fbcol = '', '', ''
 	for m, join in enumerate(joins):
 		inv = join['inv']
-		for qpart in qparts:
-			for p, _ in enumerate(qparts[qpart]):
-				acol = 'aid' if not inv else 'bid'
-				bcol = 'bid' if not inv else 'aid'
-				rcol = 'rid' if not inv else 'rid*-1'
-				qparts[qpart][p]=qparts[qpart][p].replace(f"(A{m})", f"m{m}.{acol}").replace(f"(R{m})", f"m{m}.{rcol}").replace(f"(B{m})", f"m{m}.{bcol}")
-		
+		tbl = DB['table_meme']
+		acol = 'bid' if inv else 'aid'
+		bcol = 'aid' if inv else 'bid'
+		rcol = 'rid*-1' if inv else 'rid'
+		lbcol = fbcol
+		fbcol = bcol
+		qpre = ''
+
+		if join['whr'][C]==I['=$']: 
+			cpr=' LIKE '          # String comparison
+			qpre='"'              # Prepend QNT with a double quote
+			tbl=DB['table_name']  # Change to name table
+			fbcol='aid'          # forward the AID
+		elif join['whr'][C]==I['=.']: cpr='='
+		else: cpr=K[join['whr'][C]]
+
+		# FROM table SELECT aid
+		if m==0: 
+			froms.append(f" FROM {tbl} m{m}")
+			aselect=f"m{m}.{acol} as a0"
+			select=f"concat_ws(' ', ';', m{m}.{acol}"
+		# JOIN
+		else: 
+			froms.append(f" JOIN {tbl} m{m} ON m{m-1}.{lbcol}=m{m}.{acol}")
+
+		# SELECT rid, bid, qnt
+		select+=f", {I['[']}, m{m}.{rcol}"
+		if join['sel'].get(B): select+=f", {I[']']}, m{m}.{bcol}"
+		if join['sel'].get(Q): select+=f", COALESCE('{join['whr'][C]} {qpre}' || m{m}.qnt::text)"
+
+		# WHERE gid
+		if len(join['whr']['gid'])==1: wheres.append(f"m{m}.gid={int(join['whr']['gid'][0])}")
+		else: wheres.append(f"m{m}.gid IN ("+','.join(str(int(gid)) for gid in join['whr']['gid'])+")")
+
+		# WHERE aid, rid, bid, qnt
+		for xfunc, xcpr, xcol in ((A,'=',acol),(R,'=','rid'),(B,'=',bcol),(Q,cpr,'qnt')): # harcode rid
+			if join['whr'].get(xfunc):
+				wheres.append(f"m{m}.{xcol}{xcpr}%s")
+				params.append(join['whr'][xfunc])
+
+
 	return ('SELECT '
-		+ ', '.join(qparts['select'])
-		+ ' '.join(qparts['join'])
-		+ ' WHERE ' + (' AND '.join(qparts['where']+qparts['gid']))
+		+ aselect + ('' if fset.get('aidselect') else f", {select}) AS arbq")
+		+ ' '.join(froms)
+		+ ' WHERE ' + (' AND '.join(wheres))
 	), params
 
 
@@ -513,10 +514,7 @@ def querify(tokens: list, gids: list[int] = []) -> tuple[str, list]:
 
 		for o in range(beg, end, 2): # Split by ' '
 			if OPR[tokens[o]][FUNC] == A and tokens[o+1] == I['qry']:
-				skip=True	
-				if o+3 < end and tokens[o+3]=='all':
-					qry_select, qry_params = selectify([I[']'], gids])
-					ret_selects.append(f"{qry_select} WHERE m0.aid IN (SELECT a0 FROM ZLAST)")
+				skip=True
 
 			elif o==end-2 or OPR[tokens[o+2]][FUNC]==A:
 				if tokens[o] == I['=f']: # False
@@ -553,8 +551,11 @@ def querify(tokens: list, gids: list[int] = []) -> tuple[str, list]:
 
 				# FIX LATER
 				# Also get inverse for A query
-				if (end1-beg1) == 2 and OPR[tokens[beg1]][FUNC] == A:
-					qry_select, qry_params = selectify([I[']'], tokens[beg1+1]], gids)
+				if (end1-beg1) == 2 and OPR[tokens[beg1]][FUNC] == A and tokens[beg1+1] is not None:
+					qry_select, qry_params = selectify([I[';'], tokens[beg1+1]*-1], gids)
+					or_selects.append(qry_select)
+					params.extend(qry_params)
+					qry_select, qry_params = selectify([I[';'], tokens[beg1+1], I['=$'], '%'], gids)
 					or_selects.append(qry_select)
 					params.extend(qry_params)
 
@@ -694,8 +695,8 @@ def query(memestr: str = None, gids: list[int] = []) -> str:
 	strtoks=res[0][0].split()
 	for tok in strtoks:
 		if tok==';': tokens.append(I[';'])
+		elif tok.startswith('"'): tokens.append(tok[1:])
 		elif '.' in tok: tokens.append(float(tok))
-		elif re.search(r'[a-z]', tok): tokens.append(tok)
 		else: tokens.append(int(tok))
 
 	return keyencode(tokens, gids)
@@ -828,9 +829,9 @@ def cli_dbadd():
 # Add database table
 def cli_tableadd():
 	commands = [
-		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_meme']} (gid BIGINT, aid BIGINT, rid BIGINT, bid BIGINT, qnt DOUBLE PRECISION); CREATE UNIQUE INDEX {DB['table_meme']}_aid_idx ON {DB['table_meme']} (gid,aid,rid,bid); CREATE INDEX {DB['table_meme']}_rid_idx ON {DB['table_meme']} (rid); CREATE INDEX {DB['table_meme']}_bid_idx ON {DB['table_meme']} (bid);\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_meme']} (gid BIGINT, aid BIGINT, rid BIGINT, bid BIGINT, qnt DOUBLE PRECISION, PRIMARY KEY (gid,aid,rid,bid)); CREATE INDEX {DB['table_meme']}_rid_idx ON {DB['table_meme']} (rid); CREATE INDEX {DB['table_meme']}_bid_idx ON {DB['table_meme']} (bid);\"",
 		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_impl']} (gid BIGINT, rid1 BIGINT, bid1 BIGINT, cpr1 SMALLINT, qnt1 DOUBLE PRECISION, rid2 BIGINT, bid2 BIGINT, cpr2 SMALLINT, qnt2 DOUBLE PRECISION); CREATE UNIQUE INDEX {DB['table_impl']}_aid_idx ON {DB['table_impl']} (gid,rid1,bid1); CREATE INDEX {DB['table_impl']}_bid_idx ON {DB['table_impl']} (bid1);\"",
-		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_name']} (gid BIGINT, aid BIGINT, rid BIGINT, bid BIGINT, qnt VARCHAR(511)); CREATE INDEX {DB['table_name']}_aid_idx ON {DB['table_name']} (gid,aid,rid,bid); CREATE UNIQUE INDEX {DB['table_name']}_qnt_idx ON {DB['table_name']} (qnt);\"",
+		f"sudo -u postgres psql -d {DB['name']} -c \"CREATE TABLE {DB['table_name']} (gid BIGINT, aid BIGINT, rid BIGINT, bid BIGINT, qnt VARCHAR(511), PRIMARY KEY (gid,aid,rid,bid)); CREATE UNIQUE INDEX {DB['table_name']}_qnt_idx ON {DB['table_name']} (qnt);\"",
 		f"sudo -u postgres psql -d {DB['name']} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB['table_meme']} TO {DB['user']};\"",
 		f"sudo -u postgres psql -d {DB['name']} -c \"GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE {DB['table_name']} TO {DB['user']};\"",
 	]
