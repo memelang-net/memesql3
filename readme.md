@@ -1,4 +1,4 @@
-***This repo is depriciated. Click here for the new (memesql4)[https://github.com/memelang-net/memesql4]***
+***This repo is depriciated. Click here for the new [memesql4](https://github.com/memelang-net/memesql4)***
 
 # memesql3
 
